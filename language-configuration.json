@@ -34,8 +34,8 @@
   "folding": {
     "offSide": false,
     "markers": {
-      "start": "^\\s*ttitle\\b",
-      "end": "^\\s*ttitle-tend\\b"
+      "start": "^\\s*ttitle\\s*=",
+      "end": "^\\s*ttitle-tend"
     }
   }
 }
