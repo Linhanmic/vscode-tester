@@ -13,6 +13,10 @@
   "license": "MIT",
   "version": "0.0.1",
   "publisher": "linhanmic",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Linhanmic/vscode-tester"
+  },
   "engines": {
     "vscode": "^1.108.1"
   },
@@ -28,17 +32,26 @@
     "validation"
   ],
   "contributes": {
-    "languages": [{
-      "id": "tester",
-      "aliases": ["Tester", "tester"],
-      "extensions": [".txt"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "tester",
-      "scopeName": "source.tester",
-      "path": "./syntaxes/tester.tmLanguage.json"
-    }],
+    "languages": [
+      {
+        "id": "tester",
+        "aliases": [
+          "Tester",
+          "tester"
+        ],
+        "extensions": [
+          ".txt"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tester",
+        "scopeName": "source.tester",
+        "path": "./syntaxes/tester.tmLanguage.json"
+      }
+    ],
     "snippets": [
       {
         "language": "tester",
