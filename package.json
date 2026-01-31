@@ -1,0 +1,49 @@
+{
+  "name": "vscode-tester",
+  "displayName": "Tester Language Support by Linhanmic",
+  "description": "Tester Language Support by Linhanmic",
+  "author": "Linhanmic",
+  "icon": "icons/icon.png",
+  "contributors": [
+    {
+      "name": "Linhanmic",
+      "email": "lihanmic@qq.com"
+    }
+  ],
+  "license": "MIT",
+  "version": "0.0.1",
+  "publisher": "linhanmic",
+  "engines": {
+    "vscode": "^1.108.1"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Snippets",
+    "Formatters"
+  ],
+  "keywords": [
+    "tester",
+    "autocompletion",
+    "validation"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "tester",
+      "aliases": ["Tester", "tester"],
+      "extensions": [".txt"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "tester",
+      "scopeName": "source.tester",
+      "path": "./syntaxes/tester.tmLanguage.json"
+    }],
+    "snippets": [
+      {
+        "language": "tester",
+        "path": "./snippets/tester.code-snippets"
+      }
+    ]
+  }
+}
