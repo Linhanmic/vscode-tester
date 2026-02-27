@@ -31,11 +31,11 @@
     ["【", "】"]
   ],
   // folding settings
-  "folding": {
-    "offSide": false,
-    "markers": {
-      "start": "^\\s*ttitle\\s*=",
-      "end": "^\\s*ttitle-tend"
-    }
-  }
+  // "folding": {
+  //   "offSide": false,
+  //   "markers": {
+  //     "start": "^\\s*ttitle\\s*=",
+  //     "end": "^\\s*ttitle-tend"
+  //   }
+  // }
 }

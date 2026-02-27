@@ -2,6 +2,7 @@
   "name": "vscode-tester",
   "displayName": "Tester Language Support by Linhanmic",
   "description": "Tester Language Support by Linhanmic",
+  "version": "0.0.1",
   "author": "Linhanmic",
   "icon": "icons/icon.png",
   "contributors": [
@@ -11,7 +12,6 @@
     }
   ],
   "license": "MIT",
-  "version": "0.0.1",
   "publisher": "Linhanmic",
   "repository": {
     "type": "git",
@@ -31,7 +31,7 @@
     "autocompletion",
     "validation"
   ],
-  "activationEvents": [],
+  "activationEvents": [ ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -67,6 +67,9 @@
       }
     ]
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "npm run check-types && npm run lint && node esbuild.js",
@@ -82,16 +85,21 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.109.0",
+    "@types/emscripten": "^1.41.5",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "@typescript-eslint/eslint-plugin": "^8.45.0",
-    "@typescript-eslint/parser": "^8.45.0",
-    "eslint": "^9.36.0",
-    "esbuild": "^0.25.10",
+    "@types/vscode": "^1.109.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.39.2",
+    "fs-extra": "^11.3.3",
     "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.11",
-    "@vscode/test-electron": "^2.5.2"
+    "typescript-eslint": "^8.54.0"
+  },
+  "dependencies": {
+    "candied": "^2.2.0",
+    "web-tree-sitter": "^0.26.6"
   }
 }
