@@ -1,6 +1,6 @@
+import { readFile } from "fs/promises";
 import * as vscode from "vscode";
 import { Can, Dbc } from "candied";
-import dbcReader from "candied/lib/filesystem/DbcReader";
 
 export class DbcManager {
   private dbcData: any = null;
@@ -62,7 +62,8 @@ export class DbcManager {
 
   private async loadFile(path: string) {
     try {
-      const fileContent = dbcReader(path);
+      // candied 的 DbcReader 固定按 ASCII 读取，会破坏 UTF-8 DBC 里的中文描述。
+      const fileContent = await readFile(path, "utf8");
       const dbc = new Dbc();
       this.dbcData = dbc.load(fileContent);
       this.dbcPath = path;
