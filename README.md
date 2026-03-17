@@ -1,74 +1,98 @@
-# vscode-tester README
+# Tester Language Support for VS Code
 
-这是您的扩展 "vscode-tester" 的 README 文件。在简要描述之后，我们建议包含以下部分。
+为 **Tester DSL**（CAN 总线 / 汽车 ECU 测试领域专用语言）提供 VS Code 语言支持。
 
 ## 功能特性
 
-描述您扩展的具体功能，包括扩展运行效果的截图。图片路径相对于此 README 文件。
+- **语法高亮** — 关键字、报文 ID、数据字节、注释等彩色显示
+- **智能补全** — 输入 `tcans` / `tcanr` 时，自动补全当前文件中已有的同类命令
+- **悬停解码** — 鼠标悬停在 CAN 命令上，自动解析报文 ID 和信号（需加载 DBC 文件）
+- **语法诊断** — 实时检测语法错误并在编辑器中标注
+- **大纲视图** — 在侧栏显示配置块、测试集、测试用例的层级结构
+- **代码折叠** — 折叠配置块、测试集、测试用例等代码段
+- **代码片段** — 内置常用命令模板，快速插入完整代码结构
 
-例如，如果在扩展项目工作区下有一个 images 子文件夹：
+## 安装
 
-\!$$功能 X$$$images/feature-x.png$
+### 从 VSIX 安装
 
-> 提示：许多流行的扩展使用动画。这是展示您的扩展的好方法！我们推荐简短、重点突出的动画，易于理解。
+1. 下载 `.vsix` 文件
+2. 在 VS Code 中按 `Ctrl+Shift+P`，输入 `Install from VSIX`
+3. 选择下载的文件
 
-## 系统要求
+### 从源码构建
 
-如果您有任何要求或依赖项，请添加一个部分来描述它们以及如何安装和配置。
+```bash
+git clone https://github.com/Linhanmic/vscode-tester.git
+cd vscode-tester
+npm install
+npm run package
+```
 
-## 扩展设置
+## 快速开始
 
-如果您的扩展通过 `contributes.configuration` 扩展点添加任何 VS Code 设置，请在此处包含。
+创建一个 `.tester` 或 `.txt` 文件，输入 `ttemplate` 并按 Tab 即可生成完整的测试文件模板。
 
-例如：
+一个最小的 Tester 文件如下：
 
-此扩展贡献以下设置：
+```
+// 设备配置
+tset
+    tcaninit 4,0,0,500000,2000000
+    tdiagnose_rid 7A1
+    tdiagnose_sid 7A9
+    tdiagnose_keyk 10086
+tend
 
-* `myExtension.enable`: 启用/禁用此扩展。
-* `myExtension.thing`: 设置为 `blah` 以执行某些操作。
+// 测试用例集
+ttitle=基本通信测试
+    tstart=发送报文验证
+        tcans 18FF0012,11-22-33-44-55-66-77-88,100,1
+        tcanr 18FF0013,0.0-3.7,11223344,3000
+        tdelay 500
+    tend
+ttitle-end
+```
 
-## 已知问题
+## 配置项
 
-指出已知问题可以帮助限制用户针对您的扩展打开重复的问题。
+在 VS Code 设置中搜索 `tester` 可以找到以下配置：
 
-## 发布说明
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `tester.dbcFilePath` | string | `""` | DBC 文件路径。为空时自动搜索工作区中的第一个 `.dbc` 文件 |
+| `tester.diagnostics.enabled` | boolean | `true` | 启用/禁用语法诊断 |
 
-用户在您更新扩展时会欣赏发布说明。
+## 代码片段
 
-### 1.0.0
+| 前缀 | 说明 |
+|------|------|
+| `ttemplate` | 完整测试文件模板 |
+| `tset` | 配置块（含 tcaninit、诊断、DTC） |
+| `ttitle` | 测试用例集 |
+| `tstart` | 测试用例 |
+| `tcans` | CAN 发送命令 |
+| `tcanr` | CAN 接收校验命令 |
+| `tcanr-print` | CAN 接收打印命令 |
+| `tdelay` | 延时命令 |
+| `tcaninit` | 通道初始化 |
+| `tdiag` | 诊断配置（rid + sid + keyk） |
+| `tdtc` | 故障码配置 |
 
-初始版本 ...
+## DBC 悬停解码
 
-### 1.0.1
+当工作区中存在 `.dbc` 文件时，鼠标悬停在 `tcans` 或 `tcanr` 命令上会显示：
 
-修复了问题 #。
+- 报文名称与描述
+- 报文 ID、DLC、发送节点
+- 各信号的物理值与原始值
 
-### 1.1.0
+如需指定 DBC 文件路径，可在设置中配置 `tester.dbcFilePath`。
 
-添加了功能 X、Y 和 Z。
+## 语法规范
 
----
+完整的 Tester DSL 语法规范请参阅 [docs/tester-syntax.md](docs/tester-syntax.md)。
 
-## 遵循扩展指南
+## 许可证
 
-确保您已经阅读过扩展指南并遵循创建扩展的最佳实践。
-
-* [扩展指南](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## 使用 Markdown
-
-您可以使用 Visual Studio Code 编写您的 README。以下是一些有用的编辑器键盘快捷方式：
-
-* 拆分编辑器（macOS 上为 `Cmd+\`，Windows 和 Linux 上为 `Ctrl+\`）。
-* 切换预览（macOS 上为 `Shift+Cmd+V`，Windows 和 Linux 上为 `Shift+Ctrl+V`）。
-* 按 `Ctrl+Space`（Windows、Linux、macOS）查看 Markdown 片段列表。
-
-## 了解更多
-
-* [Visual Studio Code 的 Markdown 支持](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown 语法参考](https://help.github.com/articles/markdown-basics/)
-
-**祝您使用愉快！**
-
----
-**注意：此插件目前仍在开发中，功能尚未完善。待功能完善后将补充完整的 README 文件。**
+[MIT](LICENSE)
