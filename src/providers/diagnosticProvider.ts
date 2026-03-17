@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
-import { parser, tester } from "./testerParser";
-import { Node, Query } from "web-tree-sitter";
+import { Node } from "web-tree-sitter";
+import { TreeManager } from "../parser/treeManager";
 
-export class TesterDiagnosticProvider {
+export class TesterDiagnosticProvider implements vscode.Disposable {
   private diagnosticCollection: vscode.DiagnosticCollection;
 
-  constructor() {
+  constructor(private treeManager: TreeManager) {
     this.diagnosticCollection =
       vscode.languages.createDiagnosticCollection("tester");
   }
@@ -15,19 +15,10 @@ export class TesterDiagnosticProvider {
       return;
     }
 
-    const sourceCode = document.getText();
-    const tree = parser.parse(sourceCode);
-    if (!tree) {
-      console.error("Failed to parse document, tree is null");
-      return;
-    }
+    const tree = this.treeManager.getTree(document);
     const diagnostics: vscode.Diagnostic[] = [];
 
-    // 检查语法错误
     this.checkSyntaxErrors(tree.rootNode, document, diagnostics);
-
-    // 检查语义错误
-    // this.checkSemanticErrors(tree.rootNode, document, diagnostics);
 
     this.diagnosticCollection.set(document.uri, diagnostics);
   }
@@ -37,7 +28,6 @@ export class TesterDiagnosticProvider {
     document: vscode.TextDocument,
     diagnostics: vscode.Diagnostic[],
   ): void {
-    // Tree-sitter 会自动标记 ERROR 和 MISSING 节点
     if (node.type === "ERROR" || node.isMissing) {
       const range = new vscode.Range(
         node.startPosition.row,
@@ -54,7 +44,6 @@ export class TesterDiagnosticProvider {
       diagnostics.push(diagnostic);
     }
 
-    // 递归检查子节点
     for (const child of node.children) {
       this.checkSyntaxErrors(child, document, diagnostics);
     }

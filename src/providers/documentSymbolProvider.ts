@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
-import { Parser, Node } from "web-tree-sitter";
-import { parser } from "./testerParser";
-import { TreeManager } from "./treeManager";
+import { Node } from "web-tree-sitter";
+import { TreeManager } from "../parser/treeManager";
 
 export class TesterDocumentSymbolProvider
   implements vscode.DocumentSymbolProvider

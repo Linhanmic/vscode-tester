@@ -23,23 +23,18 @@
   "categories": [
     "Programming Languages",
     "Linters",
-    "Snippets",
-    "Formatters"
+    "Snippets"
   ],
   "keywords": [
     "tester",
     "autocompletion",
-    "validation"
+    "validation",
+    "CAN",
+    "automotive"
   ],
-  "activationEvents": [ ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "vscode-tester.helloWorld",
-        "title": "Hello World"
-      }
-    ],
     "languages": [
       {
         "id": "tester",
@@ -48,7 +43,8 @@
           "tester"
         ],
         "extensions": [
-          ".txt"
+          ".txt",
+          ".tester"
         ],
         "configuration": "./language-configuration.json"
       }
@@ -65,7 +61,22 @@
         "language": "tester",
         "path": "./snippets/tester.code-snippets"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Tester Language",
+      "properties": {
+        "tester.dbcFilePath": {
+          "type": "string",
+          "default": "",
+          "description": "DBC 文件路径。为空时自动搜索工作区中的第一个 .dbc 文件。"
+        },
+        "tester.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用语法诊断"
+        }
+      }
+    }
   },
   "files": [
     "dist"

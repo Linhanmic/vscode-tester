@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { Node } from "web-tree-sitter";
-import { TreeManager } from "./treeManager";
+import { TreeManager } from "../parser/treeManager";
 
 export class TesterFoldingProvider implements vscode.FoldingRangeProvider {
   constructor(private treeManager: TreeManager) {}
