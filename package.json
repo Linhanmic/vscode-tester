@@ -20,6 +20,16 @@
   "engines": {
     "vscode": "^1.109.0"
   },
+  "activationEvents": [
+    "onLanguage:tester",
+    "onCommand:tester.runTestSuite",
+    "onCommand:tester.runTestCase",
+    "onCommand:tester.busMonitor.clear",
+    "onView:testerBusMonitor",
+    "onView:testerMessageDecoder",
+    "onView:testerProjectConfig",
+    "onView:testerDeviceManager"
+  ],
   "categories": [
     "Programming Languages",
     "Linters",
@@ -32,7 +42,6 @@
     "CAN",
     "automotive"
   ],
-  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "languages": [
@@ -74,8 +83,71 @@
           "type": "boolean",
           "default": true,
           "description": "启用语法诊断"
+        },
+        "tester.execution.defaultReceiveTimeoutMs": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 1,
+          "description": "tcanr print 命令未显式指定等待时间时使用的默认超时时间，单位毫秒。"
         }
       }
+    },
+    "commands": [
+      {
+        "command": "tester.runTestSuite",
+        "title": "Tester: 运行测试集"
+      },
+      {
+        "command": "tester.runTestCase",
+        "title": "Tester: 运行测试用例"
+      },
+      {
+        "command": "tester.busMonitor.clear",
+        "title": "Tester: 清空总线监视",
+        "icon": "$(clear-all)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tester",
+          "title": "Tester",
+          "icon": "icons/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "tester": [
+        {
+          "id": "testerProjectConfig",
+          "name": "项目配置",
+          "type": "webview"
+        },
+        {
+          "id": "testerMessageDecoder",
+          "name": "报文解析",
+          "type": "webview"
+        },
+        {
+          "id": "testerDeviceManager",
+          "name": "设备管理",
+          "type": "webview"
+        },
+        {
+          "id": "testerBusMonitor",
+          "name": "总线监视",
+          "type": "webview"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "tester.busMonitor.clear",
+          "when": "view == testerBusMonitor",
+          "group": "navigation"
+        }
+      ]
     }
   },
   "files": [
@@ -110,6 +182,7 @@
     "typescript-eslint": "^8.54.0"
   },
   "dependencies": {
+    "@vscode-tester/zlg-can": "file:../zlg-node",
     "candied": "^2.2.0",
     "web-tree-sitter": "^0.26.6"
   }

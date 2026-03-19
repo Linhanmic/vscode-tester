@@ -4,6 +4,13 @@ import { TreeManager } from "../parser/treeManager";
 import { DbcManager } from "../dbc/dbcManager";
 import { CAN_COMMAND_NODE_TYPES } from "../constants";
 import { CanCommandInfo } from "../types";
+import {
+  type DecodedDisplayMessage,
+  type DecodedDisplaySignal,
+  formatDisplayDataBytes,
+  formatMessageId,
+  isDecodedDisplayError,
+} from "../dbc/displayModel";
 
 export class TesterHoverProvider implements vscode.HoverProvider {
   constructor(
@@ -114,7 +121,7 @@ export class TesterHoverProvider implements vscode.HoverProvider {
   }
 
   private formatMessageId(id: number): string {
-    return `0x${id.toString(16).toUpperCase().padStart(3, "0")}`;
+    return formatMessageId(id);
   }
 
   private buildMarkdown(info: CanCommandInfo): vscode.MarkdownString | null {
@@ -130,7 +137,7 @@ export class TesterHoverProvider implements vscode.HoverProvider {
     dataBytes: number[];
     nodeType: string;
   }): vscode.MarkdownString {
-    const boundMessage = this.dbcManager.decodeMessage(
+    const result = this.dbcManager.decodeMessageForDisplay(
       info.messageId,
       info.dataBytes,
     );
@@ -138,59 +145,17 @@ export class TesterHoverProvider implements vscode.HoverProvider {
     const md = new vscode.MarkdownString();
     md.isTrusted = true;
 
-    const dataHex = info.dataBytes
-      .map((b: number) => b.toString(16).padStart(2, "0").toUpperCase())
-      .join(" ");
+    const dataHex = formatDisplayDataBytes(info.dataBytes);
 
-    if (!boundMessage) {
+    if (isDecodedDisplayError(result)) {
       md.appendMarkdown(`### ⚠️ 报文解析失败\n\n`);
       md.appendMarkdown(`**ID**: ${this.formatMessageId(info.messageId)}\n\n`);
       md.appendMarkdown(`**数据**: ${dataHex}\n\n`);
+      md.appendMarkdown(`**原因**: ${this.escapeMarkdownCell(result.message)}\n\n`);
       return md;
     }
 
-    const message = boundMessage.boundData.message;
-    const signals = boundMessage.boundSignals;
-
-    md.appendMarkdown(`### 📋 ${message.name}\n\n`);
-
-    if (message.description) {
-      md.appendMarkdown(`> ${message.description}\n\n`);
-    }
-
-    md.appendMarkdown(
-      `**ID**: ${this.formatMessageId(message.id)} (${message.id})`,
-    );
-    md.appendMarkdown(` | **DLC**: ${message.dlc}`);
-    if (message.sendingNode) {
-      md.appendMarkdown(` | **节点**: ${message.sendingNode}`);
-    }
-    md.appendMarkdown(`\n\n`);
-
-    md.appendMarkdown(`**数据**: ${dataHex}\n\n`);
-
-    md.appendMarkdown(`---\n\n`);
-
-    if (signals.size === 0) {
-      md.appendMarkdown(`*该报文无信号定义*\n\n`);
-      return md;
-    }
-
-    md.appendMarkdown(`#### 🔍 信号详情\n\n`);
-    md.appendMarkdown(`| 信号名 | 描述 | 物理值 | 原始值 |\n`);
-    md.appendMarkdown(`|:-------|:-----|:-------|:-------|\n`);
-
-    signals.forEach((boundSignal: any, signalName: string) => {
-      const signalDef = message.signals.get(signalName);
-      const description = signalDef?.description || "-";
-      const physValue = boundSignal.physValue || `${boundSignal.value}`;
-
-      md.appendMarkdown(
-        `| \`${signalName}\` | ${description} | **${physValue}** | ${boundSignal.rawValue} |\n`,
-      );
-    });
-
-    md.appendMarkdown(`\n`);
+    this.appendMessageDetails(md, result);
     return md;
   }
 
@@ -202,30 +167,143 @@ export class TesterHoverProvider implements vscode.HoverProvider {
     const md = new vscode.MarkdownString();
     md.isTrusted = true;
 
-    md.appendMarkdown(`### 📋 CAN 接收命令\n\n`);
-    md.appendMarkdown(`**ID**: ${this.formatMessageId(info.messageId)}\n\n`);
-
+    const modeText =
+      info.nodeType === "tcanr_print_command" ? "打印输出" : "位域对比";
+    md.appendMarkdown(`**模式**: ${modeText}`);
     if (info.bitRange) {
-      md.appendMarkdown(`**位域范围**: ${info.bitRange}\n\n`);
+      md.appendMarkdown(` · **位域范围**: \`${info.bitRange}\``);
+    }
+    md.appendMarkdown(`\n\n`);
+
+    const result = this.dbcManager.getMessageDefinition(info.messageId);
+    if (isDecodedDisplayError(result)) {
+      md.appendMarkdown(`**DBC**: ${this.escapeMarkdownCell(result.message)}\n\n`);
+      return md;
     }
 
-    if (info.nodeType === "tcanr_print_command") {
-      md.appendMarkdown(`**模式**: 打印输出\n\n`);
-    } else {
-      md.appendMarkdown(`**模式**: 位域对比\n\n`);
+    this.appendMessageDetails(md, result, {
+      showHeading: false,
+      showData: false,
+    });
+    return md;
+  }
+
+  private appendMessageDetails(
+    markdown: vscode.MarkdownString,
+    message: DecodedDisplayMessage,
+    options?: {
+      showHeading?: boolean;
+      showData?: boolean;
+    },
+  ) {
+    const showData = options?.showData ?? true;
+    const orderedSignals = this.orderSignals(message.signals);
+    const headerParts = [
+      `**${this.escapeMarkdownCell(message.name)}**`,
+      `\`${message.idHex}\``,
+      `DLC \`${message.dlc}\``,
+    ];
+    if (message.sendingNode) {
+      headerParts.push(`节点 \`${this.escapeMarkdownCell(message.sendingNode)}\``);
+    }
+    markdown.appendMarkdown(`${headerParts.join(" · ")}\n\n`);
+
+    if (message.description) {
+      markdown.appendMarkdown(`> ${this.escapeMarkdownCell(message.description)}\n\n`);
     }
 
-    // Try to get message name from DBC
-    if (this.dbcManager.isLoaded()) {
-      const testFrame = this.dbcManager.decodeMessage(info.messageId, []);
-      if (testFrame) {
-        const msgName = testFrame.boundData.message.name;
-        if (msgName) {
-          md.appendMarkdown(`**报文名称**: ${msgName}\n\n`);
-        }
+    if (message.multiplexerName) {
+      if (typeof message.multiplexerValue === "number") {
+        markdown.appendMarkdown(
+          `**复用摘要**: \`${this.escapeMarkdownCell(message.multiplexerName)} = ${message.multiplexerValue}\` -> \`m${message.multiplexerValue}\`\n\n`,
+        );
+      } else {
+        markdown.appendMarkdown(
+          `**复用摘要**: \`${this.escapeMarkdownCell(message.multiplexerName)}\`\n\n`,
+        );
       }
     }
 
-    return md;
+    if (showData) {
+      markdown.appendMarkdown(`**数据** \`${message.dataText}\`\n\n`);
+    }
+
+    if (orderedSignals.length === 0) {
+      markdown.appendMarkdown(`*该报文无信号定义*\n\n`);
+      return;
+    }
+
+    markdown.appendMarkdown(`| 类型 | 信号名 | 描述 | 位置 | 解析值 |\n`);
+    markdown.appendMarkdown(`|:-----|:-------|:-----|:-----|:-------|\n`);
+
+    for (const signal of orderedSignals) {
+      const nameCell = signal.multiplexTag
+        ? `\`${this.escapeMarkdownCell(signal.name)}\` \`${this.escapeMarkdownCell(signal.multiplexTag)}\``
+        : `\`${this.escapeMarkdownCell(signal.name)}\``;
+      markdown.appendMarkdown(
+        `| ${this.getSignalTypeLabel(signal)} | ${nameCell} | ${this.escapeMarkdownCell(signal.description)} | \`${this.escapeMarkdownCell(this.formatSignalPosition(signal, message.hasPayload))}\` | ${this.escapeMarkdownCell(this.formatSignalValue(signal, message.hasPayload))} |\n`,
+      );
+    }
+
+    markdown.appendMarkdown(`\n`);
+  }
+
+  private orderSignals(signals: DecodedDisplaySignal[]) {
+    const multiplexer: DecodedDisplaySignal[] = [];
+    const multiplexed: DecodedDisplaySignal[] = [];
+    const base: DecodedDisplaySignal[] = [];
+    for (const signal of signals) {
+      if (signal.role === "multiplexer") {
+        multiplexer.push(signal);
+      } else if (signal.role === "multiplexed") {
+        multiplexed.push(signal);
+      } else {
+        base.push(signal);
+      }
+    }
+
+    return [...multiplexer, ...multiplexed, ...base];
+  }
+
+  private getSignalTypeLabel(signal: DecodedDisplaySignal) {
+    if (signal.role === "multiplexer") {
+      return "复用器";
+    }
+
+    if (signal.role === "multiplexed") {
+      return "当前分支";
+    }
+
+    return "基础";
+  }
+
+  private formatSignalValue(
+    signal: DecodedDisplaySignal,
+    hasPayload: boolean,
+  ) {
+    if (!hasPayload) {
+      return "-";
+    }
+
+    if (signal.physValueText === "-" && signal.rawValueHexText === "-") {
+      return "-";
+    }
+
+    return signal.physValueText;
+  }
+
+  private formatSignalPosition(
+    signal: DecodedDisplaySignal,
+    hasPayload: boolean,
+  ) {
+    if (!hasPayload || signal.rawValueHexText === "-") {
+      return signal.locationText;
+    }
+
+    return `${signal.locationText}=${signal.rawValueHexText}`;
+  }
+
+  private escapeMarkdownCell(value: string): string {
+    return value.replace(/\|/g, "\\|").replace(/\r?\n/g, "<br/>");
   }
 }

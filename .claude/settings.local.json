@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//mnt/e/WorkSpaces/VSCode插件开发/项目/**)",
+      "Bash(find . -type f -name *.dbc)",
+      "Bash(find E: -name grammar.js -o -name *.gram)",
+      "Bash(npm run:*)"
+    ]
+  }
+}

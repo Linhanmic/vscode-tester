@@ -6,6 +6,15 @@ export const DOCUMENT_SELECTOR: vscode.DocumentFilter = {
   language: LANGUAGE_ID,
 };
 
+export const RUN_TEST_SUITE_COMMAND = "tester.runTestSuite";
+export const RUN_TEST_CASE_COMMAND = "tester.runTestCase";
+export const CLEAR_BUS_MONITOR_COMMAND = "tester.busMonitor.clear";
+export const BUS_MONITOR_VIEW_CONTAINER_ID = "tester";
+export const BUS_MONITOR_VIEW_ID = "testerBusMonitor";
+export const MESSAGE_DECODER_VIEW_ID = "testerMessageDecoder";
+export const PROJECT_CONFIG_VIEW_ID = "testerProjectConfig";
+export const DEVICE_MANAGER_VIEW_ID = "testerDeviceManager";
+
 // Tree-sitter node types based on grammar.js
 export const CAN_COMMAND_NODE_TYPES = new Set([
   "tcans_command",

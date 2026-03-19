@@ -106,15 +106,21 @@ tcaninit <device_id>,<device_index>,<channel_index>,<arbitration_baudrate>[,<dat
 | `device_id` | 非负整数 | 设备类型或设备 ID |
 | `device_index` | 非负整数 | 设备索引 |
 | `channel_index` | 非负整数 | 设备通道索引 |
-| `arbitration_baudrate` | 非负整数 | 仲裁域波特率 |
-| `data_baudrate` | 非负整数 | 数据域波特率，可选 |
+| `arbitration_baudrate` | 正整数 | 仲裁域波特率，单位 `kbps` |
+| `data_baudrate` | 正整数 | 数据域波特率，单位 `kbps`，可选 |
+
+说明：
+
+- DSL 中的波特率统一使用 `kbps`。
+- 运行时会自动换算为底层设备需要的 `bps`。
+- 如果写成 `500000` 这类明显的 `bps` 数值，运行前会直接报错。
 
 示例：
 
 ```tester
 tset
-  tcaninit 4,0,0,500000,2000000
-  tcaninit 4,0,1,500000
+  tcaninit 41,0,0,500,2000
+  tcaninit 41,0,1,500
 tend
 ```
 
@@ -328,7 +334,7 @@ ttitle-end
 ```tester
 // 设备配置
 tset
-  tcaninit 4,0,0,500000,2000000
+  tcaninit 4,0,0,500,2000
   tdiagnose_rid 7A1
   tdiagnose_sid 7A9
   tdiagnose_keyk 10086
@@ -354,7 +360,7 @@ ttitle-end
 
 - 推荐使用 `.tester` 作为文件扩展名；`.txt` 仅用于兼容现有流程。
 - 同一文件中先写配置块，再写测试集。
-- 统一使用不带通道前缀的 `tcans` / `tcanr` 写法，避免触发当前 parser 的实现缺陷。
+- 单通道场景可省略 `tcans` / `tcanr` 的通道前缀；多通道场景未显式写通道时默认使用通道 `0`，但仍建议显式写通道索引。
 - DTC 若需要稳定解析，优先使用十六进制字符集合形式。
 - `tnote` 仅用于注释说明，不要将其视为执行命令。
 
@@ -366,7 +372,6 @@ ttitle-end
 - `tenum`
 - `tbitfield`
 - `tcans_ch_def` 的“别名,通道索引”设计写法
-- `tcans` / `tcanr` 的可选通道前缀写法
 
 说明：
 
@@ -377,7 +382,5 @@ ttitle-end
 
 以下行为来自当前实现现状，仅作说明，不建议依赖：
 
-- 配置块中当前会错误接受 `tcans`，但正式规范不将其视为合法配置命令。
 - `integer` 词法允许负数，例如 `tdelay -1` 可被 parser 接受；正式规范仍要求延时、波特率、计数等参数使用非负整数。
 - `tcans_ch_def` 当前实际更接近“整数列表”而非“通道别名定义”，因此本文档不将其纳入正式语法。
-- `tcans` / `tcanr` 的通道前缀在当前 parser 中不能稳定工作，因此本文档统一不承诺该写法。

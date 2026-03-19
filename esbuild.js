@@ -28,13 +28,25 @@ const esbuildProblemMatcherPlugin = {
 };
 
 async function copyAssets() {
-  // 1. 复制 parser 目录
-  if (fs.existsSync("./parser")) {
-    await fs.copy("./parser", "./dist/parser");
-    console.log("Copied parser directory to dist");
+  const workspaceRoot = path.resolve(__dirname, "..");
+  const grammarWasmPath = path.join(
+    workspaceRoot,
+    "tree-sitter-tester",
+    "tree-sitter-tester.wasm",
+  );
+  const sourceParsersDir = path.join(__dirname, "parsers");
+  const distParsersDir = path.join(__dirname, "dist", "parsers");
+
+  if (fs.existsSync(grammarWasmPath)) {
+    await fs.ensureDir(sourceParsersDir);
+    await fs.ensureDir(distParsersDir);
+    await fs.copy(grammarWasmPath, path.join(sourceParsersDir, "tree-sitter-tester.wasm"));
+    await fs.copy(grammarWasmPath, path.join(distParsersDir, "tree-sitter-tester.wasm"));
+    console.log("Copied latest tree-sitter-tester.wasm");
+  } else {
+    console.error("Error: tree-sitter-tester.wasm not found in sibling workspace.");
   }
 
-  // 2.  web-tree-sitter 通常需要 tree-sitter.wasm 和 对应的 js 文件
   const webTreeSitterPath = path.join(
     __dirname,
     "node_modules",
@@ -49,14 +61,61 @@ async function copyAssets() {
     );
   }
 
-  // 3. 复制其他资源 (grammar.js 等)
-  // const assets = ["./grammar.js", "./language-configuration.json"];
-  // for (const asset of assets) {
-  //   if (fs.existsSync(asset)) {
-  //     await fs.copy(asset, path.join('./dist', path.basename(asset)));
-  //     console.log(`Copied ${asset} to dist`);
-  //   }
-  // }
+  const zlgPackageRoot = path.join(workspaceRoot, "zlg-node");
+  const zlgDistRoot = path.join(
+    __dirname,
+    "dist",
+    "node_modules",
+    "@vscode-tester",
+    "zlg-can",
+  );
+  if (fs.existsSync(zlgPackageRoot)) {
+    const shouldSkipZlgPath = (relativePath) => {
+      if (!relativePath) {
+        return false;
+      }
+
+      return (
+        relativePath.startsWith(".git") ||
+        relativePath.startsWith(".vscode") ||
+        relativePath.startsWith("node_modules") ||
+        relativePath.startsWith("examples") ||
+        relativePath.startsWith("src") ||
+        relativePath.startsWith("third_party") ||
+        relativePath.startsWith("test") ||
+        relativePath.startsWith("build\\obj") ||
+        relativePath.startsWith("build/obj")
+      );
+    };
+
+    await fs.copy(zlgPackageRoot, zlgDistRoot, {
+      overwrite: true,
+      filter: (source) => {
+        const relativePath = path.relative(zlgPackageRoot, source);
+        if (relativePath.startsWith("build\\Release") || relativePath.startsWith("build/Release")) {
+          return false;
+        }
+
+        return !shouldSkipZlgPath(relativePath);
+      },
+    });
+
+    const nativeBuildDir = path.join(zlgPackageRoot, "build", "Release");
+    const nativeBuildDistDir = path.join(zlgDistRoot, "build", "Release");
+    if (fs.existsSync(nativeBuildDir)) {
+      await fs.copy(nativeBuildDir, nativeBuildDistDir, {
+        overwrite: false,
+        errorOnExist: false,
+        filter: (source) => {
+          const relativePath = path.relative(nativeBuildDir, source);
+          return !relativePath.startsWith("obj");
+        },
+      });
+    }
+    console.log("Copied @vscode-tester/zlg-can runtime package");
+  } else {
+    console.error("Error: zlg-node workspace package not found.");
+  }
 }
 
 async function main() {
@@ -69,7 +128,7 @@ async function main() {
     sourcesContent: false,
     platform: "node",
     outfile: "dist/extension.js",
-    external: ["vscode", "web-tree-sitter"],
+    external: ["vscode", "web-tree-sitter", "@vscode-tester/zlg-can"],
     logLevel: "silent",
     plugins: [
       /* add to the end of plugins array */

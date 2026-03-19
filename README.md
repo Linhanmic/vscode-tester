@@ -10,6 +10,9 @@
 - 语法诊断：基于 tree-sitter 解析结果标记语法错误
 - 大纲视图：显示配置块、测试集、测试用例层级
 - 代码折叠：折叠配置块、测试集、测试用例
+- CodeLens 运行：可直接运行测试用例或测试集
+- CAN 执行器：串行执行测试集中的测试用例，按 DSL 语义调度 `tcans` / `tcanr` / `tdelay`
+- 总线监视侧边栏：查看当前运行状态、活动发送任务和最近总线报文
 - 代码片段：内置常用 Tester 模板
 
 ## 安装
@@ -37,7 +40,7 @@ npm run package
 
 ```tester
 tset
-  tcaninit 4,0,0,500000,2000000
+  tcaninit 41,0,0,500,2000
   tdiagnose_rid 7A1
   tdiagnose_sid 7A9
   tdiagnose_keyk 10086
@@ -63,6 +66,7 @@ ttitle-end
 |------|------|------|------|
 | `tester.dbcFilePath` | string | `""` | DBC 文件路径。为空时自动搜索工作区中的第一个 `.dbc` 文件 |
 | `tester.diagnostics.enabled` | boolean | `true` | 是否启用语法诊断 |
+| `tester.execution.defaultReceiveTimeoutMs` | number | `3000` | `tcanr ...,print` 的默认等待超时时间，单位毫秒 |
 
 ## 代码片段
 
@@ -93,6 +97,7 @@ ttitle-end
 ## 说明
 
 - 当前语法规范以 `tree-sitter` 实现为准。
+- `tcaninit` 中的波特率单位为 `kbps`，例如 `500` 表示 `500000 bps`。
 - 历史草稿中的部分设计语法尚未被当前扩展正式支持，详见 [docs/tester-syntax.md](docs/tester-syntax.md) 中的“已知限制与规划中能力”。
 
 ## 许可证
