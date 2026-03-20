@@ -1,4 +1,5 @@
 import { RunnerEvent, RunnerEventSink } from "../runtime/types";
+import { formatMessageId } from "../runtime/utils";
 
 export type RunStatus = "idle" | "running" | "passed" | "failed" | "cancelled";
 
@@ -68,10 +69,6 @@ interface StoredBusMonitorFrame {
   updateCount: number;
   status: string;
   history: BusMonitorFrameHistoryEntry[];
-}
-
-function formatMessageId(messageId: number) {
-  return `0x${messageId.toString(16).toUpperCase()}`;
 }
 
 function splitBytes(data: string) {

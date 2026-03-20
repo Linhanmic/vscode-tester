@@ -424,16 +424,10 @@ export class TesterRunService {
   }
 
   async runTestSuite(uri: vscode.Uri, suiteStartLine: number) {
-    const document = await vscode.workspace.openTextDocument(uri);
-    const parsedDocument = this.parser.parseDocument(document);
-    const suite = parsedDocument.suites.find(
-      (currentSuite) => currentSuite.startLine === suiteStartLine,
+    const { document, parsedDocument, suite } = await this.resolveTestScope(
+      uri,
+      suiteStartLine,
     );
-
-    if (!suite) {
-      throw new TesterRuntimeError(`未找到起始行 ${suiteStartLine} 对应的测试集`);
-    }
-
     await this.executeSuite(document, parsedDocument, suite);
   }
 
@@ -442,23 +436,8 @@ export class TesterRunService {
     suiteStartLine: number,
     caseStartLine: number,
   ) {
-    const document = await vscode.workspace.openTextDocument(uri);
-    const parsedDocument = this.parser.parseDocument(document);
-    const suite = parsedDocument.suites.find(
-      (currentSuite) => currentSuite.startLine === suiteStartLine,
-    );
-
-    if (!suite) {
-      throw new TesterRuntimeError(`未找到起始行 ${suiteStartLine} 对应的测试集`);
-    }
-
-    const testCase = suite.cases.find(
-      (currentCase) => currentCase.startLine === caseStartLine,
-    );
-    if (!testCase) {
-      throw new TesterRuntimeError(`未找到起始行 ${caseStartLine} 对应的测试用例`);
-    }
-
+    const { document, parsedDocument, suite, testCase } =
+      await this.resolveTestScope(uri, suiteStartLine, caseStartLine);
     await this.executeSingleCase(document, parsedDocument, suite, testCase);
   }
 
@@ -468,22 +447,8 @@ export class TesterRunService {
     caseStartLine: number,
     commandStartLine: number,
   ) {
-    const document = await vscode.workspace.openTextDocument(uri);
-    const parsedDocument = this.parser.parseDocument(document);
-    const suite = parsedDocument.suites.find(
-      (currentSuite) => currentSuite.startLine === suiteStartLine,
-    );
-
-    if (!suite) {
-      throw new TesterRuntimeError(`未找到起始行 ${suiteStartLine} 对应的测试集`);
-    }
-
-    const testCase = suite.cases.find(
-      (currentCase) => currentCase.startLine === caseStartLine,
-    );
-    if (!testCase) {
-      throw new TesterRuntimeError(`未找到起始行 ${caseStartLine} 对应的测试用例`);
-    }
+    const { document, parsedDocument, suite, testCase } =
+      await this.resolveTestScope(uri, suiteStartLine, caseStartLine);
 
     const commandIndex = testCase.commands.findIndex(
       (command) => command.startLine === commandStartLine,
@@ -505,6 +470,52 @@ export class TesterRunService {
       runTitle,
       successMessage: `命令执行完成: ${runTitle}`,
     });
+  }
+
+  private async resolveTestScope(
+    uri: vscode.Uri,
+    suiteStartLine: number,
+  ): Promise<{
+    document: vscode.TextDocument;
+    parsedDocument: ParsedTestDocument;
+    suite: ParsedTestSuite;
+  }>;
+  private async resolveTestScope(
+    uri: vscode.Uri,
+    suiteStartLine: number,
+    caseStartLine: number,
+  ): Promise<{
+    document: vscode.TextDocument;
+    parsedDocument: ParsedTestDocument;
+    suite: ParsedTestSuite;
+    testCase: ParsedTestCase;
+  }>;
+  private async resolveTestScope(
+    uri: vscode.Uri,
+    suiteStartLine: number,
+    caseStartLine?: number,
+  ) {
+    const document = await vscode.workspace.openTextDocument(uri);
+    const parsedDocument = this.parser.parseDocument(document);
+    const suite = parsedDocument.suites.find(
+      (currentSuite) => currentSuite.startLine === suiteStartLine,
+    );
+    if (!suite) {
+      throw new TesterRuntimeError(`未找到起始行 ${suiteStartLine} 对应的测试集`);
+    }
+
+    if (caseStartLine === undefined) {
+      return { document, parsedDocument, suite };
+    }
+
+    const testCase = suite.cases.find(
+      (currentCase) => currentCase.startLine === caseStartLine,
+    );
+    if (!testCase) {
+      throw new TesterRuntimeError(`未找到起始行 ${caseStartLine} 对应的测试用例`);
+    }
+
+    return { document, parsedDocument, suite, testCase };
   }
 
   private async executeSuite(
@@ -675,14 +686,6 @@ export class TesterRunService {
     return vscode.workspace
       .getConfiguration("tester")
       .get<number>("execution.defaultReceiveTimeoutMs", 3000);
-  }
-
-  private formatError(error: unknown) {
-    if (error instanceof Error) {
-      return error.message;
-    }
-
-    return String(error);
   }
 
   private async getTransport() {

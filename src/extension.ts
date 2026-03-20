@@ -76,68 +76,18 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(CLEAR_BUS_MONITOR_COMMAND, () => {
       host.busMonitorService.clear();
     }),
-    vscode.commands.registerCommand(
-      RUN_TEST_SUITE_COMMAND,
-      async (uri: vscode.Uri, suiteStartLine: number) => {
-        try {
-          const runtimeServices = await host.ensureRuntimeServices();
-          const runService = await createRunService(
-            runtimeServices.runtimeParser,
-            host.outputChannel,
-            runtimeServices.busMonitorService,
-          );
-          await runService.runTestSuite(uri, suiteStartLine);
-        } catch (error) {
-          handleRunnerError(error);
-        }
-      },
-    ),
-    vscode.commands.registerCommand(
-      RUN_TEST_CASE_COMMAND,
-      async (
-        uri: vscode.Uri,
-        suiteStartLine: number,
-        caseStartLine: number,
-      ) => {
-        try {
-          const runtimeServices = await host.ensureRuntimeServices();
-          const runService = await createRunService(
-            runtimeServices.runtimeParser,
-            host.outputChannel,
-            runtimeServices.busMonitorService,
-          );
-          await runService.runTestCase(uri, suiteStartLine, caseStartLine);
-        } catch (error) {
-          handleRunnerError(error);
-        }
-      },
-    ),
-    vscode.commands.registerCommand(
-      RUN_TEST_COMMAND_COMMAND,
-      async (
-        uri: vscode.Uri,
-        suiteStartLine: number,
-        caseStartLine: number,
-        commandStartLine: number,
-      ) => {
-        try {
-          const runtimeServices = await host.ensureRuntimeServices();
-          const runService = await createRunService(
-            runtimeServices.runtimeParser,
-            host.outputChannel,
-            runtimeServices.busMonitorService,
-          );
-          await runService.runTestCommand(
-            uri,
-            suiteStartLine,
-            caseStartLine,
-            commandStartLine,
-          );
-        } catch (error) {
-          handleRunnerError(error);
-        }
-      },
-    ),
+    registerRunCommand(host, RUN_TEST_SUITE_COMMAND, (service, args) => {
+      const [uri, suiteStartLine] = args as [vscode.Uri, number];
+      return service.runTestSuite(uri, suiteStartLine);
+    }),
+    registerRunCommand(host, RUN_TEST_CASE_COMMAND, (service, args) => {
+      const [uri, suiteStartLine, caseStartLine] = args as [vscode.Uri, number, number];
+      return service.runTestCase(uri, suiteStartLine, caseStartLine);
+    }),
+    registerRunCommand(host, RUN_TEST_COMMAND_COMMAND, (service, args) => {
+      const [uri, suiteStartLine, caseStartLine, commandStartLine] = args as [vscode.Uri, number, number, number];
+      return service.runTestCommand(uri, suiteStartLine, caseStartLine, commandStartLine);
+    }),
   );
 
   if (
@@ -148,6 +98,29 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
+function registerRunCommand(
+  host: ExtensionServiceHost,
+  commandId: string,
+  execute: (
+    service: import("./runtime/runner").TesterRunService,
+    args: unknown[],
+  ) => Promise<void>,
+) {
+  return vscode.commands.registerCommand(commandId, async (...args: unknown[]) => {
+    try {
+      const runtimeServices = await host.ensureRuntimeServices();
+      const runService = await createRunService(
+        runtimeServices.runtimeParser,
+        host.outputChannel,
+        runtimeServices.busMonitorService,
+      );
+      await execute(runService, args);
+    } catch (error) {
+      handleRunnerError(error);
+    }
+  });
+}
 
 function handleRunnerError(error: unknown) {
   if (error instanceof TesterCancellationError) {

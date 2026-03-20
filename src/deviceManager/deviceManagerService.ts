@@ -4,6 +4,7 @@ import { createDefaultTransport } from "../runtime/transportLoader";
 import type { CanSession, CanTransport, RunnerEventSink } from "../runtime/types";
 import {
   formatDataBytes,
+  formatMessageId,
   isExtendedFrame,
   parseDataSequence,
   parseHexLike,
@@ -228,11 +229,10 @@ export class DeviceManagerService implements vscode.Disposable {
 
   private async ensureSession(channels: ProjectChannelConfig[]) {
     const signature = this.createSessionSignature(channels);
-    if (this.session && this.sessionSignature === signature) {
-      return;
-    }
-
-    if (this.session && this.sessionSignature !== signature) {
+    if (this.session) {
+      if (this.sessionSignature === signature) {
+        return;
+      }
       await this.stopAllTasks("stopped");
       await this.closeSession();
       this.reporter.note("warn", "配置已变更，已停止临时发送任务");
@@ -321,7 +321,7 @@ export class DeviceManagerService implements vscode.Disposable {
           key: task.key,
           channelIndex: task.channelIndex,
           messageId: task.messageId,
-          messageIdText: `0x${task.messageId.toString(16).toUpperCase()}`,
+          messageIdText: formatMessageId(task.messageId),
           dataText: task.dataText,
           periodMs: task.periodMs,
           count: task.count,
@@ -518,24 +518,9 @@ export class DeviceManagerService implements vscode.Disposable {
   }
 
   private ensureCanSendBase() {
-    const projectStatus = this.projectSnapshot.status.state;
-    if (projectStatus === "no-script-selected") {
-      throw new Error("当前未选择脚本文件");
-    }
-    if (projectStatus === "parser-unavailable") {
-      throw new Error("语法服务尚未初始化，无法读取通道配置");
-    }
-    if (projectStatus === "no-config-block") {
-      throw new Error("当前文档没有 tset 配置块");
-    }
-    if (projectStatus === "unmanaged") {
-      throw new Error("当前配置块未接入侧边栏管理，设备管理已禁用");
-    }
-    if (!this.projectSnapshot.channels.length) {
-      throw new Error("当前 tset 中没有 tcaninit 配置");
-    }
-    if (!this.projectSnapshot.isSingleDevice) {
-      throw new Error("当前仅支持单设备多通道临时发送");
+    const status = this.resolveStatus();
+    if (!status.canSend) {
+      throw new Error(status.message);
     }
   }
 }
