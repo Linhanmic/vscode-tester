@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { getKnownCanDeviceRule } from "../can/deviceRules";
 import { BitRangeSegment, CanTransportRxFrame, ParsedTestCase } from "./types";
 
 export class TesterRuntimeError extends Error {
@@ -183,4 +184,70 @@ export function extractRangeValue(
   }
 
   return value;
+}
+
+export function enrichCanTransmitError(
+  error: unknown,
+  options: {
+    deviceId?: number;
+    channelIndex: number;
+    isCanFd: boolean;
+    dataLength: number;
+    sentCount: number;
+  },
+) {
+  const resolvedError =
+    error instanceof Error ? error : new Error(String(error));
+  const message = resolvedError.message;
+  const isTransmitError =
+    message.includes("ZCAN_TransmitFD failed to send all frames") ||
+    message.includes("ZCAN_Transmit failed to send all frames");
+
+  if (!isTransmitError || message.includes("常见原因")) {
+    return resolvedError;
+  }
+
+  const observations: string[] = [];
+  const suggestions: string[] = [];
+  const deviceRule =
+    options.deviceId === undefined
+      ? undefined
+      : getKnownCanDeviceRule(options.deviceId);
+
+  observations.push(
+    `当前通道 ch${options.channelIndex} 按 ${options.isCanFd ? "CAN FD" : "经典 CAN"} 发送`,
+  );
+  if (deviceRule) {
+    observations.push(`当前设备为 ${deviceRule.deviceName}(${deviceRule.deviceId})`);
+  }
+
+  if (options.sentCount > 0) {
+    observations.push(
+      `已连续提交 ${options.sentCount} 帧后才失败，说明前几帧已进入驱动队列`,
+    );
+    suggestions.push("重点检查总线侧是否真正发出并收到 ACK，否则周期发送会逐步塞满发送缓冲区");
+  }
+
+  if (options.isCanFd) {
+    if (options.dataLength <= 8) {
+      observations.push("虽然数据只有 8 字节，但仍会按 CAN FD 报文发送");
+    }
+    suggestions.push("确认 tcaninit 是否误填了第 5 个参数，一旦配置 data baudrate 就会按 CAN FD 通道初始化");
+    suggestions.push("确认对端支持 CAN FD/BRS，且仲裁域与数据域波特率一致");
+  } else {
+    suggestions.push("确认双方经典 CAN 仲裁域波特率一致");
+  }
+
+  if (deviceRule) {
+    suggestions.push(
+      `${deviceRule.deviceName} 仅支持固定波特率，确认仲裁域使用 ${deviceRule.arbitrationOptionsKbps.join("/")} kbps，数据域使用 ${deviceRule.dataOptionsKbps.join("/")} kbps`,
+    );
+    suggestions.push("确认通道初始化按手册在 InitCAN 之后再设置终端电阻");
+  }
+
+  suggestions.push("确认总线接线、终端电阻和在线节点状态正常");
+
+  resolvedError.message =
+    `${message}；${observations.join("，")}。常见原因：${suggestions.join("；")}`;
+  return resolvedError;
 }

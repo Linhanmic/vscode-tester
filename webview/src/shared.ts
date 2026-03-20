@@ -207,6 +207,15 @@ export interface StudioProjectSummary {
   commandCount: number;
 }
 
+export interface StudioDeviceRules {
+  deviceId: number;
+  deviceName: string;
+  fixedBaudOnly: boolean;
+  arbitrationOptionsKbps: number[];
+  dataOptionsKbps: number[];
+  summary: string;
+}
+
 export interface StudioProjectSnapshot {
   loadState: StudioLoadingState;
   message?: string;
@@ -238,6 +247,7 @@ export interface StudioProjectSnapshot {
       arbitrationBaudRateKbps: number;
       dataBaudRateKbps?: number;
     }>;
+    deviceRules?: StudioDeviceRules;
     diagnose: {
       requestId?: string;
       responseId?: string;

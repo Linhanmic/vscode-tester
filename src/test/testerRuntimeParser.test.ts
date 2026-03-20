@@ -61,6 +61,53 @@ suite("TesterRuntimeParser", () => {
     );
   });
 
+  test("已收口的 USBCANFD 设备支持手册中的固定波特率", async () => {
+    await loadLanguage();
+
+    for (const deviceId of [41, 59]) {
+      const document = await vscode.workspace.openTextDocument({
+        language: "tester",
+        content: ["tset", `  tcaninit ${deviceId},0,0,500,2000`, "tend"].join("\n"),
+      });
+
+      const treeManager = new TreeManager({
+        subscriptions: [],
+      } as unknown as vscode.ExtensionContext);
+      const parser = new TesterRuntimeParser(treeManager);
+      const parsedDocument = parser.parseDocument(document);
+
+      assert.strictEqual(parsedDocument.configuration[0].deviceId, deviceId);
+      assert.strictEqual(parsedDocument.configuration[0].arbitrationBaudRateKbps, 500);
+      assert.strictEqual(parsedDocument.configuration[0].dataBaudRateKbps, 2000);
+    }
+  });
+
+  test("已收口的 USBCANFD 设备遇到非固定波特率会直接报错", async () => {
+    await loadLanguage();
+
+    const invalidDocs = [
+      ["tset", "  tcaninit 41,0,0,333", "tend"].join("\n"),
+      ["tset", "  tcaninit 59,0,0,500,3333", "tend"].join("\n"),
+      ["tset", "  tcaninit 41,0,0,500000", "tend"].join("\n"),
+    ];
+
+    for (const content of invalidDocs) {
+      const document = await vscode.workspace.openTextDocument({
+        language: "tester",
+        content,
+      });
+      const treeManager = new TreeManager({
+        subscriptions: [],
+      } as unknown as vscode.ExtensionContext);
+      const parser = new TesterRuntimeParser(treeManager);
+
+      assert.throws(
+        () => parser.parseDocument(document),
+        /固定波特率|DSL 不支持/,
+      );
+    }
+  });
+
   test("CodeLens 会挂到测试集和测试用例起始行", async () => {
     await loadLanguage();
 

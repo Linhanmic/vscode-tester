@@ -114,6 +114,15 @@ tcaninit <device_id>,<device_index>,<channel_index>,<arbitration_baudrate>[,<dat
 - DSL 中的波特率统一使用 `kbps`。
 - 运行时会自动换算为底层设备需要的 `bps`。
 - 如果写成 `500000` 这类明显的 `bps` 数值，运行前会直接报错。
+- 以下已按手册收口的 `USBCANFD` 设备仅支持固定波特率：
+  - `41`：`USBCANFD-200U`
+  - `42`：`USBCANFD-100U`
+  - `59`：`USBCANFD-800U`
+  - `76`：`USBCANFD-400U`
+  - `85`：`USBCANFD-800H`
+  - 仲裁域：`1000/800/500/250/125/100/50`
+  - 数据域：`5000/4000/2000/1000/800/500/250/125/100`
+- 上述 `device_id` 下若需要自定义波特率，需依赖 ZCANPRO 计算器；当前 DSL 不支持直接传入自定义波特率参数。
 
 示例：
 

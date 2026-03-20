@@ -1,15 +1,14 @@
 import * as vscode from "vscode";
+import {
+  getChannelsDeviceRule,
+  validateDeviceRuleChannelConfig,
+} from "../can/deviceRules";
 import { Node } from "web-tree-sitter";
 import { DbcManager } from "../dbc/dbcManager";
 import { TreeManager } from "../parser/treeManager";
 import { DbcWorkspaceService } from "../studio/dbcWorkspaceService";
 import { WorkspaceScriptIndexService } from "../studio/workspaceScriptIndexService";
-import {
-  VALID_ARBITRATION_BAUD_RATES_KBPS,
-  VALID_DATA_BAUD_RATES_KBPS,
-  formatBaudRateHint,
-  getDeviceTypeLabel,
-} from "../zlgcan/constants";
+import { getDeviceTypeLabel } from "../zlgcan/constants";
 import type {
   ProjectChannelConfig,
   ProjectConfigSnapshot,
@@ -113,6 +112,15 @@ export class ProjectConfigService implements vscode.Disposable {
       ...this.snapshot,
       status: { ...this.snapshot.status },
       channels: this.snapshot.channels.map((channel) => ({ ...channel })),
+      deviceRules: this.snapshot.deviceRules
+        ? {
+            ...this.snapshot.deviceRules,
+            arbitrationOptionsKbps: [
+              ...this.snapshot.deviceRules.arbitrationOptionsKbps,
+            ],
+            dataOptionsKbps: [...this.snapshot.deviceRules.dataOptionsKbps],
+          }
+        : undefined,
       diagnose: { ...this.snapshot.diagnose },
       dtcs: this.snapshot.dtcs.map((item) => ({ ...item })),
       availableDbcFiles: [...this.snapshot.availableDbcFiles],
@@ -275,6 +283,7 @@ export class ProjectConfigService implements vscode.Disposable {
     const availableDbcFiles = this.dbcWorkspaceService.getAvailableFiles();
     const parsedState = await this.parseCurrentDocument();
     const singleDeviceState = this.computeSingleDevice(parsedState.channels);
+    const deviceRule = getChannelsDeviceRule(parsedState.channels);
 
     return {
       status: {
@@ -287,6 +296,16 @@ export class ProjectConfigService implements vscode.Disposable {
       documentPath: parsedState.document?.fileName,
       hasConfigurationBlock: parsedState.hasConfigurationBlock,
       channels: parsedState.channels,
+      deviceRules: deviceRule
+        ? {
+            deviceId: deviceRule.deviceId,
+            deviceName: deviceRule.deviceName,
+            fixedBaudOnly: deviceRule.fixedBaudOnly,
+            arbitrationOptionsKbps: [...deviceRule.arbitrationOptionsKbps],
+            dataOptionsKbps: [...deviceRule.dataOptionsKbps],
+            summary: deviceRule.summary,
+          }
+        : undefined,
       diagnose: parsedState.diagnose,
       dtcs: parsedState.dtcs,
       dbcStatus: this.dbcManager.getStatus(),
@@ -631,6 +650,7 @@ export class ProjectConfigService implements vscode.Disposable {
       },
       hasConfigurationBlock: false,
       channels: [],
+      deviceRules: undefined,
       diagnose: {},
       dtcs: [],
       dbcStatus: this.dbcManager.getStatus(),
@@ -642,7 +662,12 @@ export class ProjectConfigService implements vscode.Disposable {
   }
 
   private normalizeChannel(channel: ProjectChannelConfig): ProjectChannelConfig {
-    const result: ProjectChannelConfig = {
+    const rawDataBaudRate = channel.dataBaudRateKbps as
+      | number
+      | string
+      | undefined
+      | null;
+    const normalized: ProjectChannelConfig = {
       deviceId: this.parsePlainInteger(channel.deviceId, "deviceId"),
       deviceIndex: this.parsePlainInteger(channel.deviceIndex, "deviceIndex"),
       channelIndex: this.parsePlainInteger(channel.channelIndex, "channelIndex"),
@@ -651,27 +676,23 @@ export class ProjectConfigService implements vscode.Disposable {
         "arbitrationBaudRateKbps",
       ),
       dataBaudRateKbps:
-        channel.dataBaudRateKbps === undefined || channel.dataBaudRateKbps === null
+        rawDataBaudRate === undefined ||
+        rawDataBaudRate === null ||
+        (typeof rawDataBaudRate === "string" &&
+          rawDataBaudRate.trim() === "")
           ? undefined
           : this.parsePositiveInteger(
-              channel.dataBaudRateKbps,
+              rawDataBaudRate,
               "dataBaudRateKbps",
             ),
     };
-    if (!VALID_ARBITRATION_BAUD_RATES_KBPS.has(result.arbitrationBaudRateKbps)) {
-      throw new Error(
-        `仲裁域波特率 ${result.arbitrationBaudRateKbps} kbps 不在支持范围内，有效值: ${formatBaudRateHint(VALID_ARBITRATION_BAUD_RATES_KBPS)}`,
-      );
+
+    const validationMessage = validateDeviceRuleChannelConfig(normalized);
+    if (validationMessage) {
+      throw new Error(validationMessage);
     }
-    if (
-      result.dataBaudRateKbps !== undefined &&
-      !VALID_DATA_BAUD_RATES_KBPS.has(result.dataBaudRateKbps)
-    ) {
-      throw new Error(
-        `数据域波特率 ${result.dataBaudRateKbps} kbps 不在支持范围内，有效值: ${formatBaudRateHint(VALID_DATA_BAUD_RATES_KBPS)}`,
-      );
-    }
-    return result;
+
+    return normalized;
   }
 
   private normalizeDiagnose(diagnose: ProjectDiagnoseConfig): ProjectDiagnoseConfig {

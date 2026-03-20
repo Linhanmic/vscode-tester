@@ -4,6 +4,7 @@ import type {
   StudioCaseNode,
   StudioCommandNode,
   StudioConfigNode,
+  StudioDeviceRules,
   StudioLoadingState,
   StudioNoteNode,
   StudioProjectSummary,
@@ -20,6 +21,7 @@ const props = defineProps<{
   selectedScriptUri?: string;
   projectSummary: StudioProjectSummary;
   projectConfigMessage: string;
+  projectConfigRules?: StudioDeviceRules;
   selectedSuiteTitle?: string;
   selectedScriptName?: string;
 }>();
@@ -412,6 +414,7 @@ function runToCommand(node: StudioCommandNode) {
           <div class="workspace-grid config-grid">
             <section class="section span-2">
               <h3>通道</h3>
+              <p v-if="projectConfigRules" class="hint">{{ projectConfigRules.summary }}</p>
               <div v-for="(channel, index) in configDraft.channels" :key="index" class="grid four">
                 <input v-model.number="channel.deviceId" placeholder="device_id" type="number" />
                 <input v-model.number="channel.deviceIndex" placeholder="device_index" type="number" />

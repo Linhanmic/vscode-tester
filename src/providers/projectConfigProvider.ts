@@ -375,6 +375,9 @@ export class TesterProjectConfigProvider
             return '<option value="' + escapeHtml(filePath) + '"' + selected + '>' + escapeHtml(filePath) + '</option>';
           })
         ].join("");
+        const deviceRulePanel = snapshot.deviceRules
+          ? '<div class="warning"><strong>设备规则</strong><div>' + escapeHtml(snapshot.deviceRules.summary) + '</div></div>'
+          : "";
 
         const channelRows = snapshot.channels.length
           ? snapshot.channels.map((channel, index) => \`
@@ -418,6 +421,7 @@ export class TesterProjectConfigProvider
               </div>
             </div>
             <div class="panel-body">
+              \${deviceRulePanel}
               <table>
                 <thead>
                   <tr>

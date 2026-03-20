@@ -423,6 +423,7 @@ function createEmptySnapshot(): StudioSnapshot {
           :selected-script-uri="state.project.script?.uri"
           :project-summary="state.project.summary"
           :project-config-message="state.project.config.status.message"
+          :project-config-rules="state.project.config.deviceRules"
           :selected-suite-title="selectedSuiteNode?.title"
           :selected-script-name="state.project.script?.name"
           @open-node="openNode"

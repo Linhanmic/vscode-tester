@@ -1,4 +1,5 @@
 import { openSession } from "@vscode-tester/zlg-can";
+import { validateDeviceRuleChannelConfig } from "../can/deviceRules";
 import { enrichTransportError } from "../zlgcan/constants";
 import { CanSession, CanTransport, ResolvedChannelConfig } from "./types";
 import { TesterRuntimeError } from "./utils";
@@ -10,6 +11,12 @@ export class ZlgCanTransport implements CanTransport {
     }
 
     const [firstConfig, ...restConfigs] = configs;
+    for (const config of configs) {
+      const validationMessage = validateDeviceRuleChannelConfig(config);
+      if (validationMessage) {
+        throw new TesterRuntimeError(validationMessage, config.range);
+      }
+    }
     for (const currentConfig of restConfigs) {
       if (
         currentConfig.deviceId !== firstConfig.deviceId ||

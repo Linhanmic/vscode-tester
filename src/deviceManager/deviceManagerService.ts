@@ -1,9 +1,11 @@
 import * as vscode from "vscode";
+import { validateDeviceRuleChannelConfig } from "../can/deviceRules";
 import { OutputReporter } from "../runtime/outputReporter";
 import { TransportResolver } from "../runtime/transportLoader";
 import type { CanSession, RunnerEventSink } from "../runtime/types";
 import { CAN_CLASSIC_MAX_BYTES, CAN_FD_MAX_BYTES } from "../zlgcan/constants";
 import {
+  enrichCanTransmitError,
   formatDataBytes,
   formatMessageId,
   isExtendedFrame,
@@ -195,15 +197,30 @@ export class DeviceManagerService implements vscode.Disposable {
           return;
         }
 
-        await session.send({
-          channelIndex: task.channelIndex,
-          id: task.messageId,
-          data: Buffer.from(task.dataBytes),
-          extended: isExtendedFrame(task.messageId),
-          ...(this.isCanFdChannel(task.channelIndex)
-            ? { bitrateSwitch: true }
-            : {}),
-        });
+        try {
+          const channel = this.projectSnapshot.channels.find(
+            (item) => item.channelIndex === task.channelIndex,
+          );
+          await session.send({
+            channelIndex: task.channelIndex,
+            id: task.messageId,
+            data: Buffer.from(task.dataBytes),
+            extended: isExtendedFrame(task.messageId),
+            ...(channel?.dataBaudRateKbps !== undefined
+              ? { bitrateSwitch: true }
+              : {}),
+          });
+        } catch (error) {
+          throw enrichCanTransmitError(error, {
+            deviceId: this.projectSnapshot.channels.find(
+              (channel) => channel.channelIndex === task.channelIndex,
+            )?.deviceId,
+            channelIndex: task.channelIndex,
+            isCanFd: Boolean(this.isCanFdChannel(task.channelIndex)),
+            dataLength: task.dataBytes.length,
+            sentCount: task.sentCount,
+          });
+        }
 
         task.sentCount += 1;
         this.reporter.recordTxFrame(
@@ -237,6 +254,13 @@ export class DeviceManagerService implements vscode.Disposable {
   }
 
   private async ensureSession(channels: ProjectChannelConfig[]) {
+    for (const channel of channels) {
+      const validationMessage = validateDeviceRuleChannelConfig(channel);
+      if (validationMessage) {
+        throw new Error(validationMessage);
+      }
+    }
+
     const signature = this.createSessionSignature(channels);
     if (this.session) {
       if (this.sessionSignature === signature) {
@@ -363,6 +387,16 @@ export class DeviceManagerService implements vscode.Disposable {
         message: "当前 tset 中没有 tcaninit 配置",
         canSend: false,
       };
+    }
+    for (const channel of this.projectSnapshot.channels) {
+      const validationMessage = validateDeviceRuleChannelConfig(channel);
+      if (validationMessage) {
+        return {
+          state: "unsupported",
+          message: validationMessage,
+          canSend: false,
+        };
+      }
     }
     if (!this.projectSnapshot.isSingleDevice) {
       return {

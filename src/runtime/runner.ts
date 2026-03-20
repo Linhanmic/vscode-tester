@@ -22,6 +22,7 @@ import { ChannelCaptureHub } from "./channelCaptureHub";
 import { CAN_CLASSIC_MAX_BYTES } from "../zlgcan/constants";
 import {
   caseLabel,
+  enrichCanTransmitError,
   extractRangeValue,
   formatDataBytes,
   formatMessageId,
@@ -146,13 +147,26 @@ class SendTaskManager {
           return;
         }
 
-        await this.session.send({
-          channelIndex,
-          id: command.messageId,
-          data: Buffer.from(command.dataBytes),
-          extended: isExtendedFrame(command.messageId),
-          ...(this.isCanFdChannel(channelIndex) ? { bitrateSwitch: true } : {}),
-        });
+        try {
+          const channelConfig = this.configByChannelIndex.get(channelIndex);
+          await this.session.send({
+            channelIndex,
+            id: command.messageId,
+            data: Buffer.from(command.dataBytes),
+            extended: isExtendedFrame(command.messageId),
+            ...(channelConfig?.dataBaudRateBps !== undefined
+              ? { bitrateSwitch: true }
+              : {}),
+          });
+        } catch (error) {
+          throw enrichCanTransmitError(error, {
+            deviceId: this.configByChannelIndex.get(channelIndex)?.deviceId,
+            channelIndex,
+            isCanFd: this.isCanFdChannel(channelIndex),
+            dataLength: command.dataBytes.length,
+            sentCount: task.sentCount,
+          });
+        }
         task.sentCount += 1;
         this.reporter.recordTxFrame(
           channelIndex,

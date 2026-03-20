@@ -44,6 +44,8 @@ suite("ProjectConfigService", () => {
     assert.strictEqual(snapshot.channels.length, 1);
     assert.strictEqual(snapshot.channels[0].deviceId, 41);
     assert.strictEqual(snapshot.channels[0].channelIndex, 0);
+    assert.strictEqual(snapshot.deviceRules?.deviceId, 41);
+    assert.ok(snapshot.deviceRules?.summary.includes("固定波特率"));
     assert.strictEqual(snapshot.diagnose.responseId, "0x7A1");
     assert.strictEqual(snapshot.diagnose.requestId, "7A9");
     assert.strictEqual(snapshot.diagnose.keyk, "10086");
@@ -104,6 +106,46 @@ suite("ProjectConfigService", () => {
     await service.createConfigBlock();
 
     assert.ok(document.getText().startsWith("tset\ntend\n\n"));
+    service.dispose();
+  });
+
+  test("保存非法的 USBCANFD-200U 波特率会被拦截", async () => {
+    await loadLanguage();
+
+    const context = createExtensionContext();
+    const document = await vscode.workspace.openTextDocument({
+      language: "tester",
+      content: ["tset", "  tcaninit 41,0,0,500", "tend"].join("\n"),
+    });
+    await vscode.window.showTextDocument(document);
+
+    const dbcManager = new DbcManager(context);
+    const dbcWorkspaceService = new DbcWorkspaceService(dbcManager);
+    const service = new ProjectConfigService(
+      context,
+      dbcManager,
+      dbcWorkspaceService,
+    );
+    service.setTreeManager(new TreeManager(context));
+    await service.refresh();
+
+    await assert.rejects(
+      () =>
+        service.replaceConfiguration({
+          channels: [
+            {
+              deviceId: 41,
+              deviceIndex: 0,
+              channelIndex: 0,
+              arbitrationBaudRateKbps: 333,
+            },
+          ],
+          diagnose: {},
+          dtcs: [],
+        }),
+      /固定波特率|DSL 不支持/,
+    );
+
     service.dispose();
   });
 });

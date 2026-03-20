@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { validateDeviceRuleChannelConfig } from "../can/deviceRules";
 import { Node } from "web-tree-sitter";
 import { TreeManager } from "../parser/treeManager";
 import {
@@ -61,6 +62,11 @@ export class TesterRuntimeParser {
 
   private parseChannelConfig(node: Node): ResolvedChannelConfig {
     const range = toRange(node);
+    const deviceId = parseInteger(
+      this.requireFieldText(node, "device_id", range),
+      "device_id",
+      range,
+    );
     const arbitrationBaudRateKbps = this.parseBaudRateKbps(
       this.requireFieldText(node, "arbitration_baudrate", range),
       "仲裁域波特率",
@@ -71,14 +77,19 @@ export class TesterRuntimeParser {
       ? this.parseBaudRateKbps(dataBaudRateText, "数据域波特率", range)
       : undefined;
 
+    const validationMessage = validateDeviceRuleChannelConfig({
+      deviceId,
+      arbitrationBaudRateKbps,
+      dataBaudRateKbps,
+    });
+    if (validationMessage) {
+      throw new TesterRuntimeError(validationMessage, range);
+    }
+
     return {
       range,
       startLine: range.start.line,
-      deviceId: parseInteger(
-        this.requireFieldText(node, "device_id", range),
-        "device_id",
-        range,
-      ),
+      deviceId,
       deviceIndex: parseInteger(
         this.requireFieldText(node, "device_index", range),
         "device_index",

@@ -17,8 +17,18 @@ class FakeSession implements CanSession {
   readonly clearCalls: Array<number | undefined> = [];
   readonly readQueue: Array<CanTransportRxFrame | null> = [];
   closeCalls = 0;
+  sendFailureAfterCount: number | undefined;
+  sendFailure: Error | undefined;
 
   async send(frame: CanTransportFrame): Promise<void> {
+    if (
+      this.sendFailureAfterCount !== undefined &&
+      this.sendFailure &&
+      this.sentFrames.length >= this.sendFailureAfterCount
+    ) {
+      throw this.sendFailure;
+    }
+
     this.sentFrames.push({
       ...frame,
       data: Buffer.from(frame.data),
@@ -139,6 +149,48 @@ suite("TesterRunService", () => {
         "bitrateSwitch",
       ),
       false,
+    );
+  });
+
+  test("发送失败时应附带更明确的 CAN 诊断提示", async () => {
+    await loadLanguage();
+
+    const document = await vscode.workspace.openTextDocument({
+      language: "tester",
+      content: [
+        "tset",
+        "  tcaninit 41,0,0,500,2000",
+        "tend",
+        "",
+        "ttitle=套件",
+        "  tstart=发送失败",
+        "    tcans 123,11-22-33-44,0,2",
+        "  tend",
+        "ttitle-end",
+      ].join("\n"),
+    });
+
+    const treeManager = new TreeManager({
+      subscriptions: [],
+    } as unknown as vscode.ExtensionContext);
+    const parser = new TesterRuntimeParser(treeManager);
+    const fakeTransport = new FakeTransport();
+    fakeTransport.session.sendFailureAfterCount = 1;
+    fakeTransport.session.sendFailure = new Error(
+      "ZCAN_TransmitFD failed to send all frames",
+    );
+    const outputChannel = vscode.window.createOutputChannel("Tester Runner Test");
+    const service = new TesterRunService(parser, outputChannel, fakeTransport);
+
+    await assert.rejects(
+      () => service.runTestCase(document.uri, 4, 5),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message.includes("USBCANFD-200U(41)") &&
+        error.message.includes("按 CAN FD 发送") &&
+        error.message.includes("已连续提交 1 帧后才失败") &&
+        error.message.includes("误填了第 5 个参数") &&
+        error.message.includes("仅支持固定波特率"),
     );
   });
 

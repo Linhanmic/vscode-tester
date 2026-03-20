@@ -23,6 +23,15 @@ export interface ProjectChannelConfig {
   dataBaudRateKbps?: number;
 }
 
+export interface ProjectDeviceRules {
+  deviceId: number;
+  deviceName: string;
+  fixedBaudOnly: boolean;
+  arbitrationOptionsKbps: number[];
+  dataOptionsKbps: number[];
+  summary: string;
+}
+
 export interface ProjectDiagnoseConfig {
   requestId?: string;
   responseId?: string;
@@ -39,6 +48,7 @@ export interface ProjectConfigSnapshot {
   documentPath?: string;
   hasConfigurationBlock: boolean;
   channels: ProjectChannelConfig[];
+  deviceRules?: ProjectDeviceRules;
   diagnose: ProjectDiagnoseConfig;
   dtcs: ProjectDtcItem[];
   dbcStatus: DbcManagerStatus;
