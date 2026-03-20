@@ -1,7 +1,7 @@
 import type { DbcManagerStatus } from "../dbc/dbcManager";
 
 export type ProjectConfigStatusState =
-  | "no-document"
+  | "no-script-selected"
   | "parser-unavailable"
   | "no-config-block"
   | "managed"

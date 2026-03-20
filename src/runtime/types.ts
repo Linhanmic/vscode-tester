@@ -134,13 +134,13 @@ interface RunnerEventBase {
 export type RunnerEvent =
   | (RunnerEventBase & {
       type: "run-started";
-      scope: "suite" | "case";
+      scope: "suite" | "case" | "command";
       title: string;
       totalCases: number;
     })
   | (RunnerEventBase & {
       type: "run-finished";
-      scope: "suite" | "case";
+      scope: "suite" | "case" | "command";
       title: string;
       passedCount: number;
       failedCount: number;

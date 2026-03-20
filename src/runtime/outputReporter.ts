@@ -26,12 +26,18 @@ export class OutputReporter {
     this.output.show(true);
   }
 
-  runStarted(scope: "suite" | "case", title: string, totalCases: number) {
+  runStarted(
+    scope: "suite" | "case" | "command",
+    title: string,
+    totalCases: number,
+  ) {
     this.write(
       "RUN ",
       scope === "suite"
         ? `开始执行测试集: ${title} (${totalCases} 个用例)`
-        : `开始执行单用例: ${title}`,
+        : scope === "case"
+          ? `开始执行单用例: ${title}`
+          : `开始执行到命令: ${title}`,
       {
         type: "run-started",
         scope,
@@ -43,7 +49,7 @@ export class OutputReporter {
   }
 
   runFinished(
-    scope: "suite" | "case",
+    scope: "suite" | "case" | "command",
     title: string,
     passedCount: number,
     failedCount: number,

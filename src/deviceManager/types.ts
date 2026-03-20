@@ -1,7 +1,7 @@
 import type { ProjectChannelConfig } from "../projectConfig/types";
 
 export type DeviceManagerStatusState =
-  | "no-document"
+  | "no-script-selected"
   | "parser-unavailable"
   | "no-config-block"
   | "unmanaged"
@@ -41,6 +41,7 @@ export interface DeviceManagerTaskSnapshot {
 }
 
 export interface DeviceManagerSnapshot {
+  loadState: "idle" | "loading" | "ready" | "error";
   status: DeviceManagerStatus;
   documentPath?: string;
   deviceLabel: string;

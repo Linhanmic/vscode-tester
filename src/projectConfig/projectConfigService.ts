@@ -2,6 +2,8 @@ import * as vscode from "vscode";
 import { Node } from "web-tree-sitter";
 import { DbcManager } from "../dbc/dbcManager";
 import { TreeManager } from "../parser/treeManager";
+import { DbcWorkspaceService } from "../studio/dbcWorkspaceService";
+import { WorkspaceScriptIndexService } from "../studio/workspaceScriptIndexService";
 import type {
   ProjectChannelConfig,
   ProjectConfigSnapshot,
@@ -34,36 +36,53 @@ export class ProjectConfigService implements vscode.Disposable {
   private treeManager: TreeManager | undefined;
   private snapshot: ProjectConfigSnapshot;
   private readonly disposables: vscode.Disposable[] = [];
-  private readonly emitter =
-    new vscode.EventEmitter<ProjectConfigSnapshot>();
+  private readonly emitter = new vscode.EventEmitter<ProjectConfigSnapshot>();
   private refreshVersion = 0;
+  private selectedDocumentUri: vscode.Uri | undefined;
 
   constructor(
-    private readonly context: vscode.ExtensionContext,
+    _: vscode.ExtensionContext,
     private readonly dbcManager: DbcManager,
+    private readonly dbcWorkspaceService: DbcWorkspaceService,
+    scriptIndexService?: WorkspaceScriptIndexService,
   ) {
     this.snapshot = this.createInitialSnapshot();
+
     this.disposables.push(
       this.emitter,
-      vscode.window.onDidChangeActiveTextEditor(() => {
-        void this.refresh();
-      }),
       vscode.workspace.onDidChangeTextDocument((event) => {
-        if (this.isActiveTesterDocument(event.document)) {
+        if (this.isTrackedDocument(event.document)) {
           void this.refresh();
         }
       }),
       vscode.workspace.onDidSaveTextDocument((document) => {
-        if (this.isActiveTesterDocument(document)) {
+        if (this.isTrackedDocument(document)) {
           void this.refresh();
         }
       }),
       this.dbcManager.onDidChangeStatus(() => {
         void this.refresh();
       }),
+      this.dbcWorkspaceService.onDidChangeSnapshot(() => {
+        void this.refresh();
+      }),
     );
 
-    this.context.subscriptions.push(this);
+    if (scriptIndexService) {
+      this.selectedDocumentUri = scriptIndexService.getSelectedUri();
+      this.disposables.push(
+        scriptIndexService.onDidChangeSnapshot(() => {
+          this.selectedDocumentUri = scriptIndexService.getSelectedUri();
+          void this.refresh();
+        }),
+      );
+    } else {
+      this.disposables.push(
+        vscode.window.onDidChangeActiveTextEditor(() => {
+          void this.refresh();
+        }),
+      );
+    }
     void this.refresh();
   }
 
@@ -75,6 +94,11 @@ export class ProjectConfigService implements vscode.Disposable {
 
   setTreeManager(treeManager: TreeManager) {
     this.treeManager = treeManager;
+    void this.refresh();
+  }
+
+  setSelectedScript(uri: vscode.Uri | undefined) {
+    this.selectedDocumentUri = uri;
     void this.refresh();
   }
 
@@ -107,7 +131,7 @@ export class ProjectConfigService implements vscode.Disposable {
   }
 
   async createConfigBlock() {
-    const state = this.getWritableState("create");
+    const state = await this.getWritableState("create");
     if (state.hasConfigurationBlock) {
       return;
     }
@@ -121,7 +145,7 @@ export class ProjectConfigService implements vscode.Disposable {
   }
 
   async takeOverConfigBlock() {
-    const state = this.getWritableState("takeOver");
+    const state = await this.getWritableState("takeOver");
     if (!state.hasConfigurationBlock) {
       return;
     }
@@ -129,47 +153,88 @@ export class ProjectConfigService implements vscode.Disposable {
     await this.writeConfigBlock(state.document!, state);
   }
 
+  async replaceConfiguration(payload: {
+    channels: ProjectChannelConfig[];
+    diagnose: ProjectDiagnoseConfig;
+    dtcs: ProjectDtcItem[];
+  }) {
+    const state = await this.getWritableState("create-or-edit");
+    await this.writeConfigBlock(state.document!, {
+      channels: payload.channels.map((channel) => this.normalizeChannel(channel)),
+      diagnose: this.normalizeDiagnose(payload.diagnose),
+      dtcs: payload.dtcs.map((item) => this.normalizeDtc(item)),
+      configurationRange: state.configurationRange,
+    });
+  }
+
+  async replaceConfigurationRaw(rawText: string) {
+    const state = await this.getWritableState("raw");
+    const document = state.document!;
+    const trimmed = rawText.trim();
+    if (!trimmed) {
+      if (!state.configurationRange) {
+        return;
+      }
+
+      const edit = new vscode.WorkspaceEdit();
+      edit.delete(document.uri, state.configurationRange);
+      await vscode.workspace.applyEdit(edit);
+      await this.refresh();
+      return;
+    }
+
+    const edit = new vscode.WorkspaceEdit();
+    if (state.configurationRange) {
+      edit.replace(document.uri, state.configurationRange, trimmed);
+    } else {
+      const suffix = document.getText().startsWith(trimmed) ? "\n" : "\n\n";
+      edit.insert(document.uri, new vscode.Position(0, 0), trimmed + suffix);
+    }
+    await vscode.workspace.applyEdit(edit);
+    await this.refresh();
+  }
+
   async addChannel(channel: ProjectChannelConfig) {
-    const state = this.getWritableState("edit");
+    const state = await this.getWritableState("edit");
     state.channels.push(this.normalizeChannel(channel));
     await this.writeConfigBlock(state.document!, state);
   }
 
   async updateChannel(index: number, channel: ProjectChannelConfig) {
-    const state = this.getWritableState("edit");
+    const state = await this.getWritableState("edit");
     this.ensureIndex(index, state.channels.length, "通道");
     state.channels[index] = this.normalizeChannel(channel);
     await this.writeConfigBlock(state.document!, state);
   }
 
   async removeChannel(index: number) {
-    const state = this.getWritableState("edit");
+    const state = await this.getWritableState("edit");
     this.ensureIndex(index, state.channels.length, "通道");
     state.channels.splice(index, 1);
     await this.writeConfigBlock(state.document!, state);
   }
 
   async updateDiagnose(diagnose: ProjectDiagnoseConfig) {
-    const state = this.getWritableState("edit");
+    const state = await this.getWritableState("edit");
     state.diagnose = this.normalizeDiagnose(diagnose);
     await this.writeConfigBlock(state.document!, state);
   }
 
   async addDtc(item: ProjectDtcItem) {
-    const state = this.getWritableState("edit");
+    const state = await this.getWritableState("edit");
     state.dtcs.push(this.normalizeDtc(item));
     await this.writeConfigBlock(state.document!, state);
   }
 
   async updateDtc(index: number, item: ProjectDtcItem) {
-    const state = this.getWritableState("edit");
+    const state = await this.getWritableState("edit");
     this.ensureIndex(index, state.dtcs.length, "故障码");
     state.dtcs[index] = this.normalizeDtc(item);
     await this.writeConfigBlock(state.document!, state);
   }
 
   async removeDtc(index: number) {
-    const state = this.getWritableState("edit");
+    const state = await this.getWritableState("edit");
     this.ensureIndex(index, state.dtcs.length, "故障码");
     state.dtcs.splice(index, 1);
     await this.writeConfigBlock(state.document!, state);
@@ -201,8 +266,8 @@ export class ProjectConfigService implements vscode.Disposable {
   }
 
   private async buildSnapshot(): Promise<ProjectConfigSnapshot> {
-    const availableDbcFiles = await this.dbcManager.discoverWorkspaceDbcFiles();
-    const parsedState = this.parseActiveDocument();
+    const availableDbcFiles = this.dbcWorkspaceService.getAvailableFiles();
+    const parsedState = await this.parseCurrentDocument();
     const singleDeviceState = this.computeSingleDevice(parsedState.channels);
 
     return {
@@ -226,15 +291,17 @@ export class ProjectConfigService implements vscode.Disposable {
     };
   }
 
-  private parseActiveDocument(): ParsedProjectConfigState {
-    const document = this.getActiveTesterDocument();
+  private async parseCurrentDocument(): Promise<ParsedProjectConfigState> {
+    const document = await this.getCurrentTesterDocument();
     if (!document) {
       return {
         hasConfigurationBlock: false,
         canEdit: false,
         canCreateConfigBlock: false,
         canTakeOver: false,
-        message: "请选择一个 Tester 脚本文档",
+        message: this.selectedDocumentUri
+          ? "当前选中文档不是 Tester 脚本"
+          : "当前未选择脚本文件",
         channels: [],
         diagnose: {},
         dtcs: [],
@@ -356,7 +423,7 @@ export class ProjectConfigService implements vscode.Disposable {
       canCreateConfigBlock: false,
       canTakeOver: !managed,
       message: managed
-        ? "当前配置块已接入侧边栏，可直接编辑"
+        ? "当前配置块已接入 Studio，可直接编辑"
         : `配置块处于只读保护状态：${unmanagedReasons[0]}`,
       channels,
       diagnose,
@@ -364,10 +431,12 @@ export class ProjectConfigService implements vscode.Disposable {
     };
   }
 
-  private getWritableState(mode: "create" | "takeOver" | "edit") {
-    const state = this.parseActiveDocument();
+  private async getWritableState(
+    mode: "create" | "takeOver" | "edit" | "raw" | "create-or-edit",
+  ) {
+    const state = await this.parseCurrentDocument();
     if (!state.document) {
-      throw new Error("请选择一个 Tester 脚本文档");
+      throw new Error("当前未选择脚本文件");
     }
 
     if (mode === "create") {
@@ -381,6 +450,20 @@ export class ProjectConfigService implements vscode.Disposable {
       if (!state.hasConfigurationBlock) {
         throw new Error("当前文档没有可接管的配置块");
       }
+      return state;
+    }
+
+    if (mode === "create-or-edit") {
+      if (!state.hasConfigurationBlock) {
+        return state;
+      }
+      if (!state.canEdit) {
+        throw new Error(state.message);
+      }
+      return state;
+    }
+
+    if (mode === "raw") {
       return state;
     }
 
@@ -501,7 +584,7 @@ export class ProjectConfigService implements vscode.Disposable {
 
   private resolveStatusState(state: ParsedProjectConfigState) {
     if (!state.document) {
-      return "no-document" as const;
+      return "no-script-selected" as const;
     }
     if (!this.treeManager) {
       return "parser-unavailable" as const;
@@ -512,23 +595,30 @@ export class ProjectConfigService implements vscode.Disposable {
     return state.canEdit ? ("managed" as const) : ("unmanaged" as const);
   }
 
-  private getActiveTesterDocument() {
-    const document = vscode.window.activeTextEditor?.document;
-    if (!document || document.languageId !== "tester") {
+  private async getCurrentTesterDocument() {
+    const sourceUri = this.selectedDocumentUri ?? vscode.window.activeTextEditor?.document.uri;
+    if (!sourceUri) {
       return undefined;
     }
-    return document;
+
+    const document = await vscode.workspace.openTextDocument(sourceUri);
+    return document.languageId === "tester" ? document : undefined;
   }
 
-  private isActiveTesterDocument(document: vscode.TextDocument) {
-    return this.getActiveTesterDocument()?.uri.toString() === document.uri.toString();
+  private isTrackedDocument(document: vscode.TextDocument) {
+    if (this.selectedDocumentUri) {
+      return document.uri.toString() === this.selectedDocumentUri.toString();
+    }
+
+    const activeDocument = vscode.window.activeTextEditor?.document;
+    return activeDocument?.uri.toString() === document.uri.toString();
   }
 
   private createInitialSnapshot(): ProjectConfigSnapshot {
     return {
       status: {
-        state: "no-document",
-        message: "请选择一个 Tester 脚本文档",
+        state: "no-script-selected",
+        message: "当前未选择脚本文件",
         canEdit: false,
         canCreateConfigBlock: false,
         canTakeOver: false,

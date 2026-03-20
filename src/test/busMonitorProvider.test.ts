@@ -67,12 +67,13 @@ suite("TesterBusMonitorStore", () => {
     const snapshot = store.createSnapshot();
 
     assert.strictEqual(snapshot.activeTasks.length, 1);
-    assert.strictEqual(snapshot.frames.length, 2);
-    assert.strictEqual(snapshot.logs.length >= 3, true);
+    assert.strictEqual(snapshot.visibleFrames.length, 2);
+    assert.strictEqual(snapshot.totalFrameCount, 2);
+    assert.strictEqual(snapshot.totalLogCount >= 3, true);
     assert.strictEqual(snapshot.activeTasks[0].sentCount, 1);
-    assert.strictEqual(snapshot.frames[0].direction, "rx");
-    assert.strictEqual(snapshot.frames[1].direction, "tx");
-    assert.strictEqual(snapshot.frames[0].status, "捕获");
-    assert.ok(snapshot.logs.at(-1)?.description.includes("0x261"));
+    assert.strictEqual(snapshot.visibleFrames[0].direction, "rx");
+    assert.strictEqual(snapshot.visibleFrames[1].direction, "tx");
+    assert.strictEqual(snapshot.visibleFrames[0].status, "捕获");
+    assert.ok(snapshot.visibleLogs.at(-1)?.description.includes("0x261"));
   });
 });

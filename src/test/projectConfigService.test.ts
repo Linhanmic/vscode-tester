@@ -4,6 +4,7 @@ import { DbcManager } from "../dbc/dbcManager";
 import { loadLanguage } from "../parser/testerParser";
 import { TreeManager } from "../parser/treeManager";
 import { ProjectConfigService } from "../projectConfig/projectConfigService";
+import { DbcWorkspaceService } from "../studio/dbcWorkspaceService";
 
 function createExtensionContext() {
   return { subscriptions: [] } as unknown as vscode.ExtensionContext;
@@ -28,7 +29,13 @@ suite("ProjectConfigService", () => {
     });
     await vscode.window.showTextDocument(document);
 
-    const service = new ProjectConfigService(context, new DbcManager(context));
+    const dbcManager = new DbcManager(context);
+    const dbcWorkspaceService = new DbcWorkspaceService(dbcManager);
+    const service = new ProjectConfigService(
+      context,
+      dbcManager,
+      dbcWorkspaceService,
+    );
     service.setTreeManager(new TreeManager(context));
     await service.refresh();
 
@@ -56,7 +63,13 @@ suite("ProjectConfigService", () => {
     });
     await vscode.window.showTextDocument(document);
 
-    const service = new ProjectConfigService(context, new DbcManager(context));
+    const dbcManager = new DbcManager(context);
+    const dbcWorkspaceService = new DbcWorkspaceService(dbcManager);
+    const service = new ProjectConfigService(
+      context,
+      dbcManager,
+      dbcWorkspaceService,
+    );
     service.setTreeManager(new TreeManager(context));
     await service.refresh();
 
@@ -77,7 +90,13 @@ suite("ProjectConfigService", () => {
     });
     await vscode.window.showTextDocument(document);
 
-    const service = new ProjectConfigService(context, new DbcManager(context));
+    const dbcManager = new DbcManager(context);
+    const dbcWorkspaceService = new DbcWorkspaceService(dbcManager);
+    const service = new ProjectConfigService(
+      context,
+      dbcManager,
+      dbcWorkspaceService,
+    );
     service.setTreeManager(new TreeManager(context));
     await service.refresh();
 

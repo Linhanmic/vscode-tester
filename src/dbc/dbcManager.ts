@@ -28,6 +28,8 @@ export class DbcManager {
     message: "当前未加载 DBC 文件",
   };
   private readonly statusEmitter = new vscode.EventEmitter<DbcManagerStatus>();
+  private initializePromise: Promise<void> | undefined;
+  private initialized = false;
 
   constructor(private context: vscode.ExtensionContext) {
     this.can = new Can();
@@ -35,6 +37,26 @@ export class DbcManager {
   }
 
   async initialize() {
+    if (this.initialized) {
+      return;
+    }
+
+    if (this.initializePromise) {
+      return this.initializePromise;
+    }
+
+    this.initializePromise = this.initializeInternal().catch((error) => {
+      this.initializePromise = undefined;
+      throw error;
+    });
+    await this.initializePromise;
+  }
+
+  isInitialized(): boolean {
+    return this.initialized;
+  }
+
+  private async initializeInternal() {
     await this.reloadFromConfiguration();
 
     // Watch for DBC file changes
@@ -62,6 +84,7 @@ export class DbcManager {
         }
       }),
     );
+    this.initialized = true;
   }
 
   private async loadFile(filePath: string) {

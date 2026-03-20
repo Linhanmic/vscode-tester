@@ -142,6 +142,54 @@ suite("TesterRunService", () => {
     );
   });
 
+  test("运行到命令时应从用例起点执行到目标命令并在该处停止", async () => {
+    await loadLanguage();
+
+    const document = await vscode.workspace.openTextDocument({
+      language: "tester",
+      content: [
+        "tset",
+        "  tcaninit 41,0,0,500,2000",
+        "tend",
+        "",
+        "ttitle=套件",
+        "  tstart=用例一",
+        "    tcans 18FF0012,11-22-33-44,0,1",
+        "    tdelay 1",
+        "    tcanr 18FF0013,11-22-33-44,10",
+        "    tcans 18FF0014,AA-BB-CC-DD,0,1",
+        "  tend",
+        "ttitle-end",
+      ].join("\n"),
+    });
+
+    const treeManager = new TreeManager({
+      subscriptions: [],
+    } as unknown as vscode.ExtensionContext);
+    const parser = new TesterRuntimeParser(treeManager);
+    const fakeTransport = new FakeTransport();
+    fakeTransport.session.readQueue.push({
+      channelIndex: 0,
+      id: 0x18ff0013,
+      data: Buffer.from([0x11, 0x22, 0x33, 0x44]),
+      extended: true,
+      remote: false,
+      fd: true,
+      timestampUs: 0,
+      bitrateSwitch: true,
+      errorStateIndicator: false,
+    });
+
+    const outputChannel = vscode.window.createOutputChannel("Tester Runner Test");
+    const service = new TesterRunService(parser, outputChannel, fakeTransport);
+
+    await service.runTestCommand(document.uri, 4, 5, 8);
+
+    assert.strictEqual(fakeTransport.session.sentFrames.length, 1);
+    assert.strictEqual(fakeTransport.session.sentFrames[0].id, 0x18ff0012);
+    assert.strictEqual(fakeTransport.session.closeCalls, 1);
+  });
+
   test("多个 tcaninit 时未显式写通道默认使用通道 0", async () => {
     await loadLanguage();
 

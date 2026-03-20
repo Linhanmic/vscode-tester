@@ -462,6 +462,51 @@ export class TesterRunService {
     await this.executeSingleCase(document, parsedDocument, suite, testCase);
   }
 
+  async runTestCommand(
+    uri: vscode.Uri,
+    suiteStartLine: number,
+    caseStartLine: number,
+    commandStartLine: number,
+  ) {
+    const document = await vscode.workspace.openTextDocument(uri);
+    const parsedDocument = this.parser.parseDocument(document);
+    const suite = parsedDocument.suites.find(
+      (currentSuite) => currentSuite.startLine === suiteStartLine,
+    );
+
+    if (!suite) {
+      throw new TesterRuntimeError(`未找到起始行 ${suiteStartLine} 对应的测试集`);
+    }
+
+    const testCase = suite.cases.find(
+      (currentCase) => currentCase.startLine === caseStartLine,
+    );
+    if (!testCase) {
+      throw new TesterRuntimeError(`未找到起始行 ${caseStartLine} 对应的测试用例`);
+    }
+
+    const commandIndex = testCase.commands.findIndex(
+      (command) => command.startLine === commandStartLine,
+    );
+    if (commandIndex === -1) {
+      throw new TesterRuntimeError(`未找到起始行 ${commandStartLine} 对应的测试命令`);
+    }
+
+    const command = testCase.commands[commandIndex];
+    const partialCase: ParsedTestCase = {
+      ...testCase,
+      commands: testCase.commands.slice(0, commandIndex + 1),
+    };
+    const runTitle = `${testCase.label} · ${describeCommand(command)}`;
+
+    await this.executeSingleCase(document, parsedDocument, suite, partialCase, {
+      scope: "command",
+      progressTitle: `运行到命令: ${describeCommand(command)}`,
+      runTitle,
+      successMessage: `命令执行完成: ${runTitle}`,
+    });
+  }
+
   private async executeSuite(
     document: vscode.TextDocument,
     parsedDocument: ParsedTestDocument,
@@ -553,18 +598,26 @@ export class TesterRunService {
     parsedDocument: ParsedTestDocument,
     suite: ParsedTestSuite,
     testCase: ParsedTestCase,
+    options?: {
+      scope?: "case" | "command";
+      runTitle?: string;
+      progressTitle?: string;
+      successMessage?: string;
+    },
   ) {
     this.ensureRunnable(document, parsedDocument.configuration);
 
+    const scope = options?.scope ?? "case";
+    const runTitle = options?.runTitle ?? testCase.label;
     const reporter = new OutputReporter(this.output, this.eventSink);
     reporter.show();
-    reporter.runStarted("case", testCase.label, 1);
+    reporter.runStarted(scope, runTitle, 1);
 
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
         cancellable: true,
-        title: `运行测试用例: ${caseLabel(testCase)}`,
+        title: options?.progressTitle ?? `运行测试用例: ${caseLabel(testCase)}`,
       },
       async (progress, token) => {
         progress.report({ message: suite.title });
@@ -592,8 +645,8 @@ export class TesterRunService {
             await session.close();
           }
           reporter.runFinished(
-            "case",
-            testCase.label,
+            scope,
+            runTitle,
             status === "passed" ? 1 : 0,
             status === "failed" ? 1 : 0,
             status,
@@ -603,7 +656,7 @@ export class TesterRunService {
     );
 
     void vscode.window.showInformationMessage(
-      `测试用例通过: ${caseLabel(testCase)}`,
+      options?.successMessage ?? `测试用例通过: ${caseLabel(testCase)}`,
     );
   }
 
@@ -645,5 +698,20 @@ export class TesterRunService {
     }
 
     return this.transportPromise;
+  }
+}
+
+function describeCommand(command: CaseCommand) {
+  switch (command.kind) {
+    case "tcans":
+      return `tcans ${formatMessageId(command.messageId)}`;
+    case "tcanr_direct":
+      return `tcanr ${formatMessageId(command.messageId)} 整帧校验`;
+    case "tcanr_bit":
+      return `tcanr ${formatMessageId(command.messageId)} 位域校验`;
+    case "tcanr_print":
+      return `tcanr ${formatMessageId(command.messageId)} 位域打印`;
+    case "tdelay":
+      return `tdelay ${command.delayMs}ms`;
   }
 }

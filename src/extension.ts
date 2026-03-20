@@ -1,168 +1,149 @@
 import * as vscode from "vscode";
-import { loadLanguage } from "./parser/testerParser";
-import { TesterDocumentSymbolProvider } from "./providers/documentSymbolProvider";
-import { TesterFoldingProvider } from "./providers/foldingProvider";
-import { TesterDiagnosticProvider } from "./providers/diagnosticProvider";
-import { TesterHoverProvider } from "./providers/hoverProvider";
-import { TreeManager } from "./parser/treeManager";
-import { DbcManager } from "./dbc/dbcManager";
-import { TesterCompletionProvider } from "./providers/completionProvider";
 import {
-  BUS_MONITOR_VIEW_ID,
   CLEAR_BUS_MONITOR_COMMAND,
-  DEVICE_MANAGER_VIEW_ID,
   DOCUMENT_SELECTOR,
-  MESSAGE_DECODER_VIEW_ID,
-  PROJECT_CONFIG_VIEW_ID,
+  LANGUAGE_ID,
+  OPEN_STUDIO_COMMAND,
+  RUN_TEST_COMMAND_COMMAND,
   RUN_TEST_CASE_COMMAND,
   RUN_TEST_SUITE_COMMAND,
 } from "./constants";
-import { TesterRuntimeParser } from "./runtime/parser";
-import { TesterCodeLensProvider } from "./providers/codeLensProvider";
+import { ExtensionServiceHost } from "./serviceHost";
 import { TesterCancellationError } from "./runtime/utils";
-import { TesterBusMonitorProvider } from "./providers/busMonitorProvider";
-import { TesterMessageDecoderProvider } from "./providers/messageDecoderProvider";
-import { ProjectConfigService } from "./projectConfig/projectConfigService";
-import { TesterProjectConfigProvider } from "./providers/projectConfigProvider";
-import { DeviceManagerService } from "./deviceManager/deviceManagerService";
-import { TesterDeviceManagerProvider } from "./providers/deviceManagerProvider";
 
 export async function activate(context: vscode.ExtensionContext) {
-  const outputChannel = vscode.window.createOutputChannel("Tester Runner");
-  const dbcManager = new DbcManager(context);
-  const busMonitorProvider = new TesterBusMonitorProvider();
-  const messageDecoderProvider = new TesterMessageDecoderProvider(dbcManager);
-  const projectConfigService = new ProjectConfigService(context, dbcManager);
-  const projectConfigProvider = new TesterProjectConfigProvider(
-    projectConfigService,
-  );
-  const deviceManagerService = new DeviceManagerService(
-    context,
-    projectConfigService,
-    outputChannel,
-    busMonitorProvider,
-  );
-  const deviceManagerProvider = new TesterDeviceManagerProvider(
-    deviceManagerService,
-  );
+  const host = new ExtensionServiceHost(context);
 
   context.subscriptions.push(
-    outputChannel,
-    dbcManager.onDidChangeStatus((status) => {
-      logDbcStatus(outputChannel, status);
+    host,
+    vscode.languages.registerDocumentSymbolProvider(DOCUMENT_SELECTOR, {
+      async provideDocumentSymbols(document) {
+        const services = await host.ensureLanguageServices();
+        return services.documentSymbolProvider.provideDocumentSymbols(document);
+      },
     }),
-    vscode.window.registerWebviewViewProvider(
-      BUS_MONITOR_VIEW_ID,
-      busMonitorProvider,
-    ),
-    busMonitorProvider,
-    vscode.window.registerWebviewViewProvider(
-      MESSAGE_DECODER_VIEW_ID,
-      messageDecoderProvider,
-    ),
-    messageDecoderProvider,
-    vscode.window.registerWebviewViewProvider(
-      PROJECT_CONFIG_VIEW_ID,
-      projectConfigProvider,
-    ),
-    projectConfigProvider,
-    vscode.window.registerWebviewViewProvider(
-      DEVICE_MANAGER_VIEW_ID,
-      deviceManagerProvider,
-    ),
-    deviceManagerProvider,
-    vscode.commands.registerCommand(CLEAR_BUS_MONITOR_COMMAND, () => {
-      busMonitorProvider.clear();
+    vscode.languages.registerFoldingRangeProvider(DOCUMENT_SELECTOR, {
+      async provideFoldingRanges(document) {
+        const services = await host.ensureLanguageServices();
+        return services.foldingProvider.provideFoldingRanges(document);
+      },
     }),
+    vscode.languages.registerHoverProvider(DOCUMENT_SELECTOR, {
+      async provideHover(document, position) {
+        const [services] = await Promise.all([
+          host.ensureLanguageServices(),
+          host.ensureDbcReady(),
+        ]);
+        return services.hoverProvider.provideHover(document, position);
+      },
+    }),
+    vscode.languages.registerCompletionItemProvider(
+      DOCUMENT_SELECTOR,
+      {
+        async provideCompletionItems(document, position, token, context) {
+          const services = await host.ensureLanguageServices();
+          return services.completionProvider.provideCompletionItems(
+            document,
+            position,
+            token,
+            context,
+          );
+        },
+        async resolveCompletionItem(item, token) {
+          const services = await host.ensureLanguageServices();
+          return services.completionProvider.resolveCompletionItem(item, token);
+        },
+      },
+      " ",
+    ),
   );
 
-  try {
-    await dbcManager.initialize();
-  } catch (error) {
-    logActivationError(outputChannel, "DBC 初始化失败", error);
-  }
+  const lazyCodeLensProvider: vscode.CodeLensProvider = {
+    async provideCodeLenses(document) {
+      const services = await host.ensureLanguageServices();
+      return services.codeLensProvider.provideCodeLenses(document);
+    },
+  };
 
-  try {
-    await loadLanguage();
+  context.subscriptions.push(
+    vscode.languages.registerCodeLensProvider(
+      DOCUMENT_SELECTOR,
+      lazyCodeLensProvider,
+    ),
+    vscode.commands.registerCommand(OPEN_STUDIO_COMMAND, async () => {
+      await host.openStudio();
+    }),
+    vscode.commands.registerCommand(CLEAR_BUS_MONITOR_COMMAND, () => {
+      host.busMonitorService.clear();
+    }),
+    vscode.commands.registerCommand(
+      RUN_TEST_SUITE_COMMAND,
+      async (uri: vscode.Uri, suiteStartLine: number) => {
+        try {
+          const runtimeServices = await host.ensureRuntimeServices();
+          const runService = await createRunService(
+            runtimeServices.runtimeParser,
+            host.outputChannel,
+            runtimeServices.busMonitorService,
+          );
+          await runService.runTestSuite(uri, suiteStartLine);
+        } catch (error) {
+          handleRunnerError(error);
+        }
+      },
+    ),
+    vscode.commands.registerCommand(
+      RUN_TEST_CASE_COMMAND,
+      async (
+        uri: vscode.Uri,
+        suiteStartLine: number,
+        caseStartLine: number,
+      ) => {
+        try {
+          const runtimeServices = await host.ensureRuntimeServices();
+          const runService = await createRunService(
+            runtimeServices.runtimeParser,
+            host.outputChannel,
+            runtimeServices.busMonitorService,
+          );
+          await runService.runTestCase(uri, suiteStartLine, caseStartLine);
+        } catch (error) {
+          handleRunnerError(error);
+        }
+      },
+    ),
+    vscode.commands.registerCommand(
+      RUN_TEST_COMMAND_COMMAND,
+      async (
+        uri: vscode.Uri,
+        suiteStartLine: number,
+        caseStartLine: number,
+        commandStartLine: number,
+      ) => {
+        try {
+          const runtimeServices = await host.ensureRuntimeServices();
+          const runService = await createRunService(
+            runtimeServices.runtimeParser,
+            host.outputChannel,
+            runtimeServices.busMonitorService,
+          );
+          await runService.runTestCommand(
+            uri,
+            suiteStartLine,
+            caseStartLine,
+            commandStartLine,
+          );
+        } catch (error) {
+          handleRunnerError(error);
+        }
+      },
+    ),
+  );
 
-    const treeManager = new TreeManager(context);
-    projectConfigService.setTreeManager(treeManager);
-    const runtimeParser = new TesterRuntimeParser(treeManager);
-
-    context.subscriptions.push(
-      vscode.languages.registerDocumentSymbolProvider(
-        DOCUMENT_SELECTOR,
-        new TesterDocumentSymbolProvider(treeManager),
-      ),
-      vscode.languages.registerFoldingRangeProvider(
-        DOCUMENT_SELECTOR,
-        new TesterFoldingProvider(treeManager),
-      ),
-      vscode.languages.registerHoverProvider(
-        DOCUMENT_SELECTOR,
-        new TesterHoverProvider(treeManager, dbcManager),
-      ),
-      vscode.languages.registerCompletionItemProvider(
-        DOCUMENT_SELECTOR,
-        new TesterCompletionProvider(treeManager),
-        " ",
-      ),
-      vscode.languages.registerCodeLensProvider(
-        DOCUMENT_SELECTOR,
-        new TesterCodeLensProvider(runtimeParser),
-      ),
-      vscode.commands.registerCommand(
-        RUN_TEST_SUITE_COMMAND,
-        async (uri: vscode.Uri, suiteStartLine: number) => {
-          try {
-            const runService = await createRunService(
-              runtimeParser,
-              outputChannel,
-              busMonitorProvider,
-            );
-            await runService.runTestSuite(uri, suiteStartLine);
-          } catch (error) {
-            handleRunnerError(error);
-          }
-        },
-      ),
-      vscode.commands.registerCommand(
-        RUN_TEST_CASE_COMMAND,
-        async (
-          uri: vscode.Uri,
-          suiteStartLine: number,
-          caseStartLine: number,
-        ) => {
-          try {
-            const runService = await createRunService(
-              runtimeParser,
-              outputChannel,
-              busMonitorProvider,
-            );
-            await runService.runTestCase(uri, suiteStartLine, caseStartLine);
-          } catch (error) {
-            handleRunnerError(error);
-          }
-        },
-      ),
-    );
-
-    // Conditionally enable diagnostics
-    const config = vscode.workspace.getConfiguration("tester");
-    if (config.get<boolean>("diagnostics.enabled", true)) {
-      const diagnosticProvider = new TesterDiagnosticProvider(treeManager);
-      context.subscriptions.push(diagnosticProvider);
-      context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument((e) =>
-          diagnosticProvider.updateDiagnostics(e.document),
-        ),
-        vscode.workspace.onDidOpenTextDocument((doc) =>
-          diagnosticProvider.updateDiagnostics(doc),
-        ),
-      );
-    }
-  } catch (error) {
-    logActivationError(outputChannel, "语言服务初始化失败", error);
+  if (
+    vscode.workspace.textDocuments.some((document) => document.languageId === LANGUAGE_ID)
+  ) {
+    host.prewarmLanguageServices();
   }
 }
 
@@ -178,40 +159,16 @@ function handleRunnerError(error: unknown) {
   void vscode.window.showErrorMessage(message);
 }
 
-function logActivationError(
-  outputChannel: vscode.OutputChannel,
-  title: string,
-  error: unknown,
-) {
-  const message = error instanceof Error ? error.message : String(error);
-  outputChannel.appendLine(`[${title}] ${message}`);
-  void vscode.window.showErrorMessage(`${title}: ${message}`);
-}
-
-function logDbcStatus(
-  outputChannel: vscode.OutputChannel,
-  status: ReturnType<DbcManager["getStatus"]>,
-) {
-  if (status.state === "loaded") {
-    outputChannel.appendLine(`[DBC] ${status.message}`);
-    return;
-  }
-
-  if (status.state === "error") {
-    outputChannel.appendLine(`[DBC] ${status.message}`);
-  }
-}
-
 async function createRunService(
-  runtimeParser: TesterRuntimeParser,
+  runtimeParser: import("./runtime/parser").TesterRuntimeParser,
   outputChannel: vscode.OutputChannel,
-  busMonitorProvider: TesterBusMonitorProvider,
+  busMonitorService: import("./studio/busMonitorService").BusMonitorService,
 ) {
   const { TesterRunService } = await import("./runtime/runner.js");
   return new TesterRunService(
     runtimeParser,
     outputChannel,
     undefined,
-    busMonitorProvider,
+    busMonitorService,
   );
 }

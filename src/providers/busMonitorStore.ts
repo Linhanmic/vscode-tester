@@ -26,6 +26,39 @@ export interface BusMonitorFrameSnapshot {
   key: string;
   direction: "tx" | "rx";
   channelIndex: number;
+  messageIdText: string;
+  data: string;
+  updateCount: number;
+  status: string;
+}
+
+export interface BusMonitorLogEntry {
+  id: string;
+  timestamp: number;
+  timeText: string;
+  level: "info" | "warn" | "error";
+  title: string;
+  description: string;
+}
+
+export interface BusMonitorSnapshot {
+  loadState: "idle" | "loading" | "ready" | "error";
+  runStatus: RunStatus;
+  runTitle: string;
+  currentCase: string;
+  passedCount: number;
+  failedCount: number;
+  activeTasks: BusMonitorTaskSnapshot[];
+  visibleFrames: BusMonitorFrameSnapshot[];
+  visibleLogs: BusMonitorLogEntry[];
+  totalFrameCount: number;
+  totalLogCount: number;
+}
+
+interface StoredBusMonitorFrame {
+  key: string;
+  direction: "tx" | "rx";
+  channelIndex: number;
   messageId: number;
   messageIdText: string;
   bytes: string[];
@@ -35,25 +68,6 @@ export interface BusMonitorFrameSnapshot {
   updateCount: number;
   status: string;
   history: BusMonitorFrameHistoryEntry[];
-}
-
-export interface BusMonitorLogEntry {
-  id: string;
-  timestamp: number;
-  level: "info" | "warn" | "error";
-  title: string;
-  description: string;
-}
-
-export interface BusMonitorSnapshot {
-  runStatus: RunStatus;
-  runTitle: string;
-  currentCase: string;
-  passedCount: number;
-  failedCount: number;
-  activeTasks: BusMonitorTaskSnapshot[];
-  frames: BusMonitorFrameSnapshot[];
-  logs: BusMonitorLogEntry[];
 }
 
 function formatMessageId(messageId: number) {
@@ -78,6 +92,17 @@ function compareChangedIndices(previous: string[], next: string[]) {
   return changedIndices;
 }
 
+function formatRunScope(scope: "suite" | "case" | "command") {
+  switch (scope) {
+    case "suite":
+      return "测试集";
+    case "case":
+      return "测试用例";
+    case "command":
+      return "命令";
+  }
+}
+
 export class TesterBusMonitorStore implements RunnerEventSink {
   private runStatus: RunStatus = "idle";
   private runTitle = "空闲";
@@ -85,7 +110,7 @@ export class TesterBusMonitorStore implements RunnerEventSink {
   private passedCount = 0;
   private failedCount = 0;
   private readonly activeTasks = new Map<string, BusMonitorTaskSnapshot>();
-  private readonly frames = new Map<string, BusMonitorFrameSnapshot>();
+  private readonly frames = new Map<string, StoredBusMonitorFrame>();
   private readonly logs: BusMonitorLogEntry[] = [];
 
   clear() {
@@ -110,7 +135,7 @@ export class TesterBusMonitorStore implements RunnerEventSink {
           event.timestamp,
           "info",
           "开始执行",
-          `${event.scope === "suite" ? "测试集" : "测试用例"}: ${event.title}`,
+          `${formatRunScope(event.scope)}: ${event.title}`,
         );
         break;
       case "run-finished":
@@ -238,7 +263,15 @@ export class TesterBusMonitorStore implements RunnerEventSink {
   }
 
   createSnapshot(): BusMonitorSnapshot {
+    const sortedFrames = Array.from(this.frames.values()).sort(
+      (left, right) => right.updatedAt - left.updatedAt,
+    );
+    const sortedLogs = [...this.logs].sort(
+      (left, right) => left.timestamp - right.timestamp,
+    );
+
     return {
+      loadState: "ready",
       runStatus: this.runStatus,
       runTitle: this.runTitle,
       currentCase: this.currentCase,
@@ -247,10 +280,18 @@ export class TesterBusMonitorStore implements RunnerEventSink {
       activeTasks: Array.from(this.activeTasks.values()).sort(
         (left, right) => right.updatedAt - left.updatedAt,
       ),
-      frames: Array.from(this.frames.values()).sort(
-        (left, right) => right.updatedAt - left.updatedAt,
-      ),
-      logs: [...this.logs].sort((left, right) => left.timestamp - right.timestamp),
+      visibleFrames: sortedFrames.slice(0, 120).map((frame) => ({
+        key: frame.key,
+        direction: frame.direction,
+        channelIndex: frame.channelIndex,
+        messageIdText: frame.messageIdText,
+        data: frame.data,
+        updateCount: frame.updateCount,
+        status: frame.status,
+      })),
+      visibleLogs: sortedLogs.slice(-120),
+      totalFrameCount: sortedFrames.length,
+      totalLogCount: sortedLogs.length,
     };
   }
 
@@ -304,6 +345,9 @@ export class TesterBusMonitorStore implements RunnerEventSink {
     this.logs.push({
       id: `${timestamp}:${title}:${this.logs.length}`,
       timestamp,
+      timeText: new Date(timestamp).toLocaleTimeString("zh-CN", {
+        hour12: false,
+      }),
       level,
       title,
       description,

@@ -49,7 +49,7 @@ export class DeviceManagerService implements vscode.Disposable {
   private driverErrorMessage: string | undefined;
 
   constructor(
-    private readonly context: vscode.ExtensionContext,
+    _: vscode.ExtensionContext,
     projectConfigService: ProjectConfigService,
     outputChannel: vscode.OutputChannel,
     eventSink?: RunnerEventSink,
@@ -62,7 +62,6 @@ export class DeviceManagerService implements vscode.Disposable {
         void this.handleProjectSnapshotChanged(snapshot);
       }),
     );
-    this.context.subscriptions.push(this);
     this.rebuildSnapshot();
   }
 
@@ -307,6 +306,7 @@ export class DeviceManagerService implements vscode.Disposable {
   private rebuildSnapshot() {
     const status = this.resolveStatus();
     this.snapshot = {
+      loadState: "ready",
       status,
       documentPath: this.projectSnapshot.documentPath,
       deviceLabel: this.projectSnapshot.deviceLabel,
@@ -334,10 +334,10 @@ export class DeviceManagerService implements vscode.Disposable {
 
   private resolveStatus(): DeviceManagerSnapshot["status"] {
     const projectStatus = this.projectSnapshot.status.state;
-    if (projectStatus === "no-document") {
+    if (projectStatus === "no-script-selected") {
       return {
-        state: "no-document",
-        message: "请选择一个 Tester 脚本文档",
+        state: "no-script-selected",
+        message: "当前未选择脚本文件",
         canSend: false,
       };
     }
@@ -490,9 +490,10 @@ export class DeviceManagerService implements vscode.Disposable {
 
   private createInitialSnapshot(): DeviceManagerSnapshot {
     return {
+      loadState: "idle",
       status: {
-        state: "no-document",
-        message: "请选择一个 Tester 脚本文档",
+        state: "no-script-selected",
+        message: "当前未选择脚本文件",
         canSend: false,
       },
       deviceLabel: "未配置设备",
@@ -518,8 +519,8 @@ export class DeviceManagerService implements vscode.Disposable {
 
   private ensureCanSendBase() {
     const projectStatus = this.projectSnapshot.status.state;
-    if (projectStatus === "no-document") {
-      throw new Error("请选择一个 Tester 脚本文档");
+    if (projectStatus === "no-script-selected") {
+      throw new Error("当前未选择脚本文件");
     }
     if (projectStatus === "parser-unavailable") {
       throw new Error("语法服务尚未初始化，无法读取通道配置");

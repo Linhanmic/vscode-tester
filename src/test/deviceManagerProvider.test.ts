@@ -26,6 +26,7 @@ suite("TesterDeviceManagerProvider", () => {
   test("未连接运行器时仍生成基础界面", () => {
     const provider = new TesterDeviceManagerProvider(
       new MockDeviceManagerService({
+        loadState: "ready",
         status: {
           state: "driver-unavailable",
           message: "驱动不可用：缺少运行时",
@@ -47,6 +48,7 @@ suite("TesterDeviceManagerProvider", () => {
   test("快照会被推送到 webview", async () => {
     const provider = new TesterDeviceManagerProvider(
       new MockDeviceManagerService({
+        loadState: "ready",
         status: {
           state: "ready",
           message: "可直接基于当前脚本通道发起临时发送，首次发送时会检查驱动",

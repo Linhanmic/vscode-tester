@@ -8,6 +8,8 @@ export const DOCUMENT_SELECTOR: vscode.DocumentFilter = {
 
 export const RUN_TEST_SUITE_COMMAND = "tester.runTestSuite";
 export const RUN_TEST_CASE_COMMAND = "tester.runTestCase";
+export const RUN_TEST_COMMAND_COMMAND = "tester.runTestCommand";
+export const OPEN_STUDIO_COMMAND = "tester.openStudio";
 export const CLEAR_BUS_MONITOR_COMMAND = "tester.busMonitor.clear";
 export const BUS_MONITOR_VIEW_CONTAINER_ID = "tester";
 export const BUS_MONITOR_VIEW_ID = "testerBusMonitor";
