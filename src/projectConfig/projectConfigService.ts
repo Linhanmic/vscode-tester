@@ -4,6 +4,12 @@ import { DbcManager } from "../dbc/dbcManager";
 import { TreeManager } from "../parser/treeManager";
 import { DbcWorkspaceService } from "../studio/dbcWorkspaceService";
 import { WorkspaceScriptIndexService } from "../studio/workspaceScriptIndexService";
+import {
+  VALID_ARBITRATION_BAUD_RATES_KBPS,
+  VALID_DATA_BAUD_RATES_KBPS,
+  formatBaudRateHint,
+  getDeviceTypeLabel,
+} from "../zlgcan/constants";
 import type {
   ProjectChannelConfig,
   ProjectConfigSnapshot,
@@ -577,7 +583,7 @@ export class ProjectConfigService implements vscode.Disposable {
     return {
       isSingleDevice,
       label: isSingleDevice
-        ? `设备 ${first.deviceId} / ${first.deviceIndex}`
+        ? `${getDeviceTypeLabel(first.deviceId)} #${first.deviceIndex}`
         : "存在多个设备配置",
     };
   }
@@ -636,7 +642,7 @@ export class ProjectConfigService implements vscode.Disposable {
   }
 
   private normalizeChannel(channel: ProjectChannelConfig): ProjectChannelConfig {
-    return {
+    const result: ProjectChannelConfig = {
       deviceId: this.parsePlainInteger(channel.deviceId, "deviceId"),
       deviceIndex: this.parsePlainInteger(channel.deviceIndex, "deviceIndex"),
       channelIndex: this.parsePlainInteger(channel.channelIndex, "channelIndex"),
@@ -652,6 +658,20 @@ export class ProjectConfigService implements vscode.Disposable {
               "dataBaudRateKbps",
             ),
     };
+    if (!VALID_ARBITRATION_BAUD_RATES_KBPS.has(result.arbitrationBaudRateKbps)) {
+      throw new Error(
+        `仲裁域波特率 ${result.arbitrationBaudRateKbps} kbps 不在支持范围内，有效值: ${formatBaudRateHint(VALID_ARBITRATION_BAUD_RATES_KBPS)}`,
+      );
+    }
+    if (
+      result.dataBaudRateKbps !== undefined &&
+      !VALID_DATA_BAUD_RATES_KBPS.has(result.dataBaudRateKbps)
+    ) {
+      throw new Error(
+        `数据域波特率 ${result.dataBaudRateKbps} kbps 不在支持范围内，有效值: ${formatBaudRateHint(VALID_DATA_BAUD_RATES_KBPS)}`,
+      );
+    }
+    return result;
   }
 
   private normalizeDiagnose(diagnose: ProjectDiagnoseConfig): ProjectDiagnoseConfig {

@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
 import { OutputReporter } from "../runtime/outputReporter";
-import { createDefaultTransport } from "../runtime/transportLoader";
-import type { CanSession, CanTransport, RunnerEventSink } from "../runtime/types";
+import { TransportResolver } from "../runtime/transportLoader";
+import type { CanSession, RunnerEventSink } from "../runtime/types";
+import { CAN_CLASSIC_MAX_BYTES, CAN_FD_MAX_BYTES } from "../zlgcan/constants";
 import {
   formatDataBytes,
   formatMessageId,
@@ -41,9 +42,8 @@ export class DeviceManagerService implements vscode.Disposable {
   private readonly drafts = new Map<number, TemporarySendDraft>();
   private readonly tasks = new Map<string, RunningTask>();
   private readonly reporter: OutputReporter;
+  private readonly transportResolver = new TransportResolver();
   private snapshot = this.createInitialSnapshot();
-  private transport: CanTransport | undefined;
-  private transportPromise: Promise<CanTransport> | undefined;
   private session: CanSession | undefined;
   private sessionSignature: string | undefined;
   private projectSnapshot: ProjectConfigSnapshot;
@@ -181,6 +181,15 @@ export class DeviceManagerService implements vscode.Disposable {
     }
 
     try {
+      if (
+        !this.isCanFdChannel(task.channelIndex) &&
+        task.dataBytes.length > CAN_CLASSIC_MAX_BYTES
+      ) {
+        throw new Error(
+          `通道 ${task.channelIndex} 为经典 CAN，数据长度 ${task.dataBytes.length} 超过 ${CAN_CLASSIC_MAX_BYTES} 字节上限，如需发送更多数据请配置 CAN FD（添加数据域波特率）`,
+        );
+      }
+
       for (let index = 0; index < task.count; index += 1) {
         if (task.cancelled) {
           return;
@@ -267,21 +276,7 @@ export class DeviceManagerService implements vscode.Disposable {
   }
 
   private async getTransport() {
-    if (this.transport) {
-      return this.transport;
-    }
-
-    if (!this.transportPromise) {
-      this.transportPromise = createDefaultTransport().then((transport) => {
-        this.transport = transport;
-        return transport;
-      }).catch((error) => {
-        this.transportPromise = undefined;
-        throw error;
-      });
-    }
-
-    return this.transportPromise;
+    return this.transportResolver.get();
   }
 
   private isCanFdChannel(channelIndex: number) {
@@ -466,8 +461,8 @@ export class DeviceManagerService implements vscode.Disposable {
     if (!bytes.length) {
       throw new Error("报文数据不能为空");
     }
-    if (bytes.length > 64) {
-      throw new Error("临时发送最多支持 64 字节数据");
+    if (bytes.length > CAN_FD_MAX_BYTES) {
+      throw new Error(`临时发送最多支持 ${CAN_FD_MAX_BYTES} 字节数据`);
     }
     if (bytes.some((byte) => !Number.isInteger(byte) || byte < 0 || byte > 0xff)) {
       throw new Error("报文数据包含非法字节");

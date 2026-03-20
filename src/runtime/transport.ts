@@ -1,4 +1,5 @@
 import { openSession } from "@vscode-tester/zlg-can";
+import { enrichTransportError } from "../zlgcan/constants";
 import { CanSession, CanTransport, ResolvedChannelConfig } from "./types";
 import { TesterRuntimeError } from "./utils";
 
@@ -20,14 +21,24 @@ export class ZlgCanTransport implements CanTransport {
       }
     }
 
-    return openSession({
-      deviceType: firstConfig.deviceId,
-      deviceIndex: firstConfig.deviceIndex,
-      channels: configs.map((config) => ({
-        channelIndex: config.channelIndex,
-        arbitrationBaudRateBps: config.arbitrationBaudRateBps,
-        dataBaudRateBps: config.dataBaudRateBps,
-      })),
-    });
+    try {
+      return await openSession({
+        deviceType: firstConfig.deviceId,
+        deviceIndex: firstConfig.deviceIndex,
+        channels: configs.map((config) => ({
+          channelIndex: config.channelIndex,
+          arbitrationBaudRateBps: config.arbitrationBaudRateBps,
+          dataBaudRateBps: config.dataBaudRateBps,
+        })),
+      });
+    } catch (error) {
+      throw new TesterRuntimeError(
+        enrichTransportError(
+          error,
+          firstConfig.deviceId,
+          configs.some((c) => c.dataBaudRateBps !== undefined),
+        ),
+      );
+    }
   }
 }

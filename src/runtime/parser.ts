@@ -14,6 +14,12 @@ import {
   ResolvedChannelConfig,
 } from "./types";
 import {
+  VALID_ARBITRATION_BAUD_RATES_KBPS,
+  VALID_DATA_BAUD_RATES_KBPS,
+  formatBaudRateHint,
+  CAN_FD_MAX_BYTES,
+} from "../zlgcan/constants";
+import {
   parseBitRangeSegment,
   parseDataSequence,
   parseExpectedScalar,
@@ -103,6 +109,15 @@ export class TesterRuntimeParser {
         range,
       );
     }
+    const validSet = label.includes("数据域")
+      ? VALID_DATA_BAUD_RATES_KBPS
+      : VALID_ARBITRATION_BAUD_RATES_KBPS;
+    if (!validSet.has(value)) {
+      throw new TesterRuntimeError(
+        `${label} ${value} kbps 不在 ZLGCAN 支持范围内，有效值: ${formatBaudRateHint(validSet)}`,
+        range,
+      );
+    }
     return value;
   }
 
@@ -164,13 +179,20 @@ export class TesterRuntimeParser {
   private parseSendCommand(node: Node): ParsedSendCommand {
     const range = toRange(node);
     const channelText = this.optionalFieldText(node, "send_channel");
+    const dataBytes = parseDataSequence(
+      this.requireFieldText(node, "message_data", range),
+    );
+    if (dataBytes.length > CAN_FD_MAX_BYTES) {
+      throw new TesterRuntimeError(
+        `报文数据长度 ${dataBytes.length} 超过 CAN FD 最大 ${CAN_FD_MAX_BYTES} 字节`,
+        range,
+      );
+    }
 
     return {
       kind: "tcans",
       messageId: parseHexLike(this.requireFieldText(node, "message_id", range)),
-      dataBytes: parseDataSequence(
-        this.requireFieldText(node, "message_data", range),
-      ),
+      dataBytes,
       periodMs: parseInteger(
         this.requireFieldText(node, "period", range),
         "发送周期",

@@ -16,9 +16,10 @@ import {
   RunnerEventSink,
 } from "./types";
 import { TesterRuntimeParser } from "./parser";
-import { createDefaultTransport } from "./transportLoader";
+import { TransportResolver } from "./transportLoader";
 import { OutputReporter } from "./outputReporter";
 import { ChannelCaptureHub } from "./channelCaptureHub";
+import { CAN_CLASSIC_MAX_BYTES } from "../zlgcan/constants";
 import {
   caseLabel,
   extractRangeValue,
@@ -127,6 +128,15 @@ class SendTaskManager {
         );
         reason = "completed";
         return;
+      }
+
+      if (
+        !this.isCanFdChannel(channelIndex) &&
+        command.dataBytes.length > CAN_CLASSIC_MAX_BYTES
+      ) {
+        throw new TesterRuntimeError(
+          `通道 ${channelIndex} 为经典 CAN，数据长度 ${command.dataBytes.length} 超过 ${CAN_CLASSIC_MAX_BYTES} 字节上限，如需发送更多数据请配置 CAN FD（添加数据域波特率）`,
+        );
       }
 
       for (let index = 0; index < command.count; index += 1) {
@@ -411,8 +421,7 @@ class CaseRunner {
 }
 
 export class TesterRunService {
-  private resolvedTransport: CanTransport | undefined;
-  private transportPromise: Promise<CanTransport> | undefined;
+  private readonly transportResolver: TransportResolver;
 
   constructor(
     private readonly parser: TesterRuntimeParser,
@@ -420,7 +429,7 @@ export class TesterRunService {
     transport: CanTransport | undefined,
     private readonly eventSink?: RunnerEventSink,
   ) {
-    this.resolvedTransport = transport;
+    this.transportResolver = new TransportResolver(transport);
   }
 
   async runTestSuite(uri: vscode.Uri, suiteStartLine: number) {
@@ -689,18 +698,7 @@ export class TesterRunService {
   }
 
   private async getTransport() {
-    if (this.resolvedTransport) {
-      return this.resolvedTransport;
-    }
-
-    if (!this.transportPromise) {
-      this.transportPromise = createDefaultTransport().then((transport) => {
-        this.resolvedTransport = transport;
-        return transport;
-      });
-    }
-
-    return this.transportPromise;
+    return this.transportResolver.get();
   }
 }
 
