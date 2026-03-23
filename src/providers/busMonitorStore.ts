@@ -263,9 +263,10 @@ export class TesterBusMonitorStore implements RunnerEventSink {
     const sortedFrames = Array.from(this.frames.values()).sort(
       (left, right) => right.updatedAt - left.updatedAt,
     );
-    const sortedLogs = [...this.logs].sort(
-      (left, right) => left.timestamp - right.timestamp,
-    );
+    // Logs are already in chronological order (appended sequentially), no sort needed
+    const visibleLogs = this.logs.length <= 120
+      ? this.logs.slice()
+      : this.logs.slice(-120);
 
     return {
       loadState: "ready",
@@ -286,9 +287,9 @@ export class TesterBusMonitorStore implements RunnerEventSink {
         updateCount: frame.updateCount,
         status: frame.status,
       })),
-      visibleLogs: sortedLogs.slice(-120),
+      visibleLogs,
       totalFrameCount: sortedFrames.length,
-      totalLogCount: sortedLogs.length,
+      totalLogCount: this.logs.length,
     };
   }
 
@@ -317,6 +318,11 @@ export class TesterBusMonitorStore implements RunnerEventSink {
       status: options.status,
     };
 
+    const previousHistory = previous?.history ?? [];
+    const history = previousHistory.length < 10
+      ? [historyEntry, ...previousHistory]
+      : [historyEntry, ...previousHistory.slice(0, 9)];
+
     this.frames.set(options.key, {
       key: options.key,
       direction: options.direction,
@@ -329,7 +335,7 @@ export class TesterBusMonitorStore implements RunnerEventSink {
       updatedAt: options.timestamp,
       updateCount: (previous?.updateCount ?? 0) + 1,
       status: options.status,
-      history: [historyEntry, ...(previous?.history ?? [])].slice(0, 10),
+      history,
     });
   }
 

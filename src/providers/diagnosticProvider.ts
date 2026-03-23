@@ -42,6 +42,11 @@ export class TesterDiagnosticProvider implements vscode.Disposable {
         vscode.DiagnosticSeverity.Error,
       );
       diagnostics.push(diagnostic);
+      return;
+    }
+
+    if (!node.hasError) {
+      return;
     }
 
     for (const child of node.children) {

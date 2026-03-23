@@ -27,6 +27,66 @@ const esbuildProblemMatcherPlugin = {
   },
 };
 
+async function copyZlgRuntimePackage(workspaceRoot) {
+  const zlgPackageRoot = path.join(workspaceRoot, "zlg-node");
+  const zlgDistRoot = path.join(
+    __dirname,
+    "dist",
+    "node_modules",
+    "@vscode-tester",
+    "zlg-can",
+  );
+
+  if (!fs.existsSync(zlgPackageRoot)) {
+    console.error("Error: zlg-node workspace package not found.");
+    return;
+  }
+
+  const releaseDir = path.join(zlgPackageRoot, "build", "Release");
+  const nativeModulePath = path.join(releaseDir, "zlg_node.node");
+  if (!fs.existsSync(nativeModulePath)) {
+    console.error("Error: zlg-node native runtime not found. Build ../zlg-node first.");
+    return;
+  }
+
+  const packageJsonPath = path.join(zlgPackageRoot, "package.json");
+  const sourcePackageJson = await fs.readJson(packageJsonPath);
+
+  await fs.remove(zlgDistRoot);
+  await fs.ensureDir(path.join(zlgDistRoot, "build", "Release"));
+
+  await fs.copy(path.join(zlgPackageRoot, "index.js"), path.join(zlgDistRoot, "index.js"));
+  await fs.copy(path.join(zlgPackageRoot, "index.d.ts"), path.join(zlgDistRoot, "index.d.ts"));
+  await fs.copy(path.join(zlgPackageRoot, "lib"), path.join(zlgDistRoot, "lib"));
+  await fs.copy(nativeModulePath, path.join(zlgDistRoot, "build", "Release", "zlg_node.node"));
+
+  const zlgNativeDllPath = path.join(releaseDir, "zlgcan.dll");
+  if (fs.existsSync(zlgNativeDllPath)) {
+    await fs.copy(zlgNativeDllPath, path.join(zlgDistRoot, "build", "Release", "zlgcan.dll"));
+  }
+
+  const kernelDllsPath = path.join(releaseDir, "kerneldlls");
+  if (fs.existsSync(kernelDllsPath)) {
+    await fs.copy(kernelDllsPath, path.join(zlgDistRoot, "build", "Release", "kerneldlls"));
+  }
+
+  await fs.writeJson(
+    path.join(zlgDistRoot, "package.json"),
+    {
+      name: sourcePackageJson.name,
+      version: sourcePackageJson.version,
+      description: sourcePackageJson.description,
+      main: "index.js",
+      types: "index.d.ts",
+      type: "commonjs",
+      license: sourcePackageJson.license,
+    },
+    { spaces: 2 },
+  );
+
+  console.log("Copied @vscode-tester/zlg-can runtime package");
+}
+
 async function copyAssets() {
   const workspaceRoot = path.resolve(__dirname, "..");
   const grammarWasmPath = path.join(
@@ -60,62 +120,7 @@ async function copyAssets() {
       'Error: web-tree-sitter not found in node_modules. Run "npm install" first.',
     );
   }
-
-  const zlgPackageRoot = path.join(workspaceRoot, "zlg-node");
-  const zlgDistRoot = path.join(
-    __dirname,
-    "dist",
-    "node_modules",
-    "@vscode-tester",
-    "zlg-can",
-  );
-  if (fs.existsSync(zlgPackageRoot)) {
-    const shouldSkipZlgPath = (relativePath) => {
-      if (!relativePath) {
-        return false;
-      }
-
-      return (
-        relativePath.startsWith(".git") ||
-        relativePath.startsWith(".vscode") ||
-        relativePath.startsWith("node_modules") ||
-        relativePath.startsWith("examples") ||
-        relativePath.startsWith("src") ||
-        relativePath.startsWith("third_party") ||
-        relativePath.startsWith("test") ||
-        relativePath.startsWith("build\\obj") ||
-        relativePath.startsWith("build/obj")
-      );
-    };
-
-    await fs.copy(zlgPackageRoot, zlgDistRoot, {
-      overwrite: true,
-      filter: (source) => {
-        const relativePath = path.relative(zlgPackageRoot, source);
-        if (relativePath.startsWith("build\\Release") || relativePath.startsWith("build/Release")) {
-          return false;
-        }
-
-        return !shouldSkipZlgPath(relativePath);
-      },
-    });
-
-    const nativeBuildDir = path.join(zlgPackageRoot, "build", "Release");
-    const nativeBuildDistDir = path.join(zlgDistRoot, "build", "Release");
-    if (fs.existsSync(nativeBuildDir)) {
-      await fs.copy(nativeBuildDir, nativeBuildDistDir, {
-        overwrite: false,
-        errorOnExist: false,
-        filter: (source) => {
-          const relativePath = path.relative(nativeBuildDir, source);
-          return !relativePath.startsWith("obj");
-        },
-      });
-    }
-    console.log("Copied @vscode-tester/zlg-can runtime package");
-  } else {
-    console.error("Error: zlg-node workspace package not found.");
-  }
+  await copyZlgRuntimePackage(workspaceRoot);
 }
 
 async function main() {

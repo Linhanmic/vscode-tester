@@ -45,14 +45,25 @@ export class TesterRuntimeParser {
     const tree = this.treeManager.getTree(document);
     const configuration: ResolvedChannelConfig[] = [];
     const suites: ParsedTestSuite[] = [];
+    const root = tree.rootNode;
 
-    this.traverse(tree.rootNode, (node) => {
-      if (node.type === "tcaninit_command") {
-        configuration.push(this.parseChannelConfig(node));
-      } else if (node.type === "test_suite") {
-        suites.push(this.parseSuite(node));
+    for (let index = 0; index < root.namedChildCount; index += 1) {
+      const child = root.namedChild(index);
+      if (!child) {
+        continue;
       }
-    });
+
+      if (child.type === "configuration_block") {
+        for (let configIndex = 0; configIndex < child.namedChildCount; configIndex += 1) {
+          const configChild = child.namedChild(configIndex);
+          if (configChild?.type === "tcaninit_command") {
+            configuration.push(this.parseChannelConfig(configChild));
+          }
+        }
+      } else if (child.type === "test_suite") {
+        suites.push(this.parseSuite(child));
+      }
+    }
 
     return {
       configuration,
@@ -351,13 +362,4 @@ export class TesterRuntimeParser {
     return value;
   }
 
-  private traverse(node: Node, callback: (node: Node) => void) {
-    callback(node);
-    for (let index = 0; index < node.namedChildCount; index += 1) {
-      const child = node.namedChild(index);
-      if (child) {
-        this.traverse(child, callback);
-      }
-    }
-  }
 }

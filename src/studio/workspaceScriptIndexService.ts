@@ -29,12 +29,7 @@ export class WorkspaceScriptIndexService implements vscode.Disposable {
   }
 
   getSnapshot(): StudioScriptsSnapshot {
-    return {
-      loadState: this.snapshot.loadState,
-      message: this.snapshot.message,
-      items: this.snapshot.items.map((item) => ({ ...item })),
-      selectedUri: this.snapshot.selectedUri,
-    };
+    return this.snapshot;
   }
 
   getSelectedUri(): vscode.Uri | undefined {

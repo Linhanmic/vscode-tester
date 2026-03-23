@@ -99,7 +99,7 @@ export class ScriptModelService implements vscode.Disposable {
     }
 
     this.snapshot = snapshot;
-    this.emitter.fire(this.getSnapshot());
+    this.emitter.fire(snapshot);
   }
 
   async mutateSuite(mutation: StudioSuiteMutation) {
@@ -391,7 +391,7 @@ export class ScriptModelService implements vscode.Disposable {
 
       const tree = this.treeManager.getTree(document);
       const items: StudioProjectItem[] = [];
-      const configNode = this.findConfigurationBlock(tree.rootNode);
+      let hasConfigNode = false;
       for (let index = 0; index < tree.rootNode.namedChildCount; index += 1) {
         const child = tree.rootNode.namedChild(index);
         if (!child) {
@@ -399,6 +399,7 @@ export class ScriptModelService implements vscode.Disposable {
         }
 
         if (child.type === "configuration_block") {
+          hasConfigNode = true;
           const parsedConfig = this.parseConfigNode(document, child, configSnapshot);
           if (parsedConfig) {
             items.push(parsedConfig);
@@ -419,7 +420,7 @@ export class ScriptModelService implements vscode.Disposable {
         items.push(this.createRawNode(document, child, "root"));
       }
 
-      if (!configNode && configSnapshot.hasConfigurationBlock) {
+      if (!hasConfigNode && configSnapshot.hasConfigurationBlock) {
         items.unshift({
           kind: "raw",
           id: "root:config-missing",
@@ -810,7 +811,7 @@ export class ScriptModelService implements vscode.Disposable {
     if (this.snapshot.state !== "ready") {
       throw new Error(this.snapshot.errorMessage ?? "当前脚本不可编辑");
     }
-    return this.getSnapshot();
+    return this.snapshot;
   }
 
   private findSuite(items: StudioProjectItem[], suiteStartLine: number) {
@@ -854,16 +855,6 @@ export class ScriptModelService implements vscode.Disposable {
       }
     }
 
-    return undefined;
-  }
-
-  private findConfigurationBlock(root: Node) {
-    for (let index = 0; index < root.namedChildCount; index += 1) {
-      const child = root.namedChild(index);
-      if (child?.type === "configuration_block") {
-        return child;
-      }
-    }
     return undefined;
   }
 

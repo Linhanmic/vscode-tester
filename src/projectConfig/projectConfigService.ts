@@ -43,6 +43,7 @@ export class ProjectConfigService implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly emitter = new vscode.EventEmitter<ProjectConfigSnapshot>();
   private refreshVersion = 0;
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private selectedDocumentUri: vscode.Uri | undefined;
 
   constructor(
@@ -57,19 +58,19 @@ export class ProjectConfigService implements vscode.Disposable {
       this.emitter,
       vscode.workspace.onDidChangeTextDocument((event) => {
         if (this.isTrackedDocument(event.document)) {
-          void this.refresh();
+          this.scheduleRefresh();
         }
       }),
       vscode.workspace.onDidSaveTextDocument((document) => {
         if (this.isTrackedDocument(document)) {
-          void this.refresh();
+          this.scheduleRefresh();
         }
       }),
       this.dbcManager.onDidChangeStatus(() => {
-        void this.refresh();
+        this.scheduleRefresh();
       }),
       this.dbcWorkspaceService.onDidChangeSnapshot(() => {
-        void this.refresh();
+        this.scheduleRefresh();
       }),
     );
 
@@ -78,13 +79,13 @@ export class ProjectConfigService implements vscode.Disposable {
       this.disposables.push(
         scriptIndexService.onDidChangeSnapshot(() => {
           this.selectedDocumentUri = scriptIndexService.getSelectedUri();
-          void this.refresh();
+          this.scheduleRefresh();
         }),
       );
     } else {
       this.disposables.push(
         vscode.window.onDidChangeActiveTextEditor(() => {
-          void this.refresh();
+          this.scheduleRefresh();
         }),
       );
     }
@@ -92,6 +93,11 @@ export class ProjectConfigService implements vscode.Disposable {
   }
 
   dispose() {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+
     for (const disposable of this.disposables) {
       disposable.dispose();
     }
@@ -108,24 +114,7 @@ export class ProjectConfigService implements vscode.Disposable {
   }
 
   getSnapshot(): ProjectConfigSnapshot {
-    return {
-      ...this.snapshot,
-      status: { ...this.snapshot.status },
-      channels: this.snapshot.channels.map((channel) => ({ ...channel })),
-      deviceRules: this.snapshot.deviceRules
-        ? {
-            ...this.snapshot.deviceRules,
-            arbitrationOptionsKbps: [
-              ...this.snapshot.deviceRules.arbitrationOptionsKbps,
-            ],
-            dataOptionsKbps: [...this.snapshot.deviceRules.dataOptionsKbps],
-          }
-        : undefined,
-      diagnose: { ...this.snapshot.diagnose },
-      dtcs: this.snapshot.dtcs.map((item) => ({ ...item })),
-      availableDbcFiles: [...this.snapshot.availableDbcFiles],
-      dbcStatus: { ...this.snapshot.dbcStatus },
-    };
+    return this.snapshot;
   }
 
   get onDidChangeSnapshot(): vscode.Event<ProjectConfigSnapshot> {
@@ -277,6 +266,17 @@ export class ProjectConfigService implements vscode.Disposable {
     }
 
     await this.setDbcPath(result[0].fsPath);
+  }
+
+  private scheduleRefresh() {
+    if (this.refreshTimer) {
+      return;
+    }
+
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      void this.refresh();
+    }, 60);
   }
 
   private async buildSnapshot(): Promise<ProjectConfigSnapshot> {

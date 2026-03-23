@@ -226,10 +226,14 @@ export class ExtensionServiceHost implements vscode.Disposable {
     this.disposables.push(
       this.diagnosticsProvider,
       vscode.workspace.onDidChangeTextDocument((event) => {
-        this.diagnosticsProvider?.updateDiagnostics(event.document);
+        if (event.document.languageId === LANGUAGE_ID) {
+          this.diagnosticsProvider?.updateDiagnostics(event.document);
+        }
       }),
       vscode.workspace.onDidOpenTextDocument((document) => {
-        this.diagnosticsProvider?.updateDiagnostics(document);
+        if (document.languageId === LANGUAGE_ID) {
+          this.diagnosticsProvider?.updateDiagnostics(document);
+        }
       }),
     );
 
