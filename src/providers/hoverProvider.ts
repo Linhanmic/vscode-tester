@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { Tree, Node } from "web-tree-sitter";
 import { TreeManager } from "../parser/treeManager";
-import { DbcManager } from "../dbc/dbcManager";
 import { CAN_COMMAND_NODE_TYPES } from "../constants";
 import { CanCommandInfo } from "../types";
 import {
@@ -11,17 +10,22 @@ import {
   formatMessageId,
   isDecodedDisplayError,
 } from "../dbc/displayModel";
+import type { DbcManager } from "../dbc/dbcManager";
+
+const DATA_SPLIT_PATTERN = /[-\s]+/;
+const PIPE_PATTERN = /\|/g;
+const NEWLINE_PATTERN = /\r?\n/g;
 
 export class TesterHoverProvider implements vscode.HoverProvider {
   constructor(
     private treeManager: TreeManager,
-    private dbcManager: DbcManager,
+    private readonly getDbcManager: () => Promise<DbcManager>,
   ) {}
 
-  provideHover(
+  async provideHover(
     document: vscode.TextDocument,
     position: vscode.Position,
-  ): vscode.Hover | null {
+  ): Promise<vscode.Hover | null> {
     const tree = this.treeManager.getTree(document);
     const node = this.findCanCommandNode(tree, document, position);
     if (!node) {
@@ -34,7 +38,8 @@ export class TesterHoverProvider implements vscode.HoverProvider {
     }
 
     try {
-      const markdown = this.buildMarkdown(info);
+      const dbcManager = await this.getDbcManager();
+      const markdown = this.buildMarkdown(info, dbcManager);
       if (!markdown) {
         return null;
       }
@@ -73,7 +78,10 @@ export class TesterHoverProvider implements vscode.HoverProvider {
   }
 
   private parseDataSequence(text: string): number[] {
-    return text.split(/[-\s]+/).map((b) => parseInt(b, 16));
+    return text
+      .split(DATA_SPLIT_PATTERN)
+      .filter((b) => b.length > 0)
+      .map((b) => parseInt(b, 16));
   }
 
   private extractCanInfo(
@@ -120,15 +128,14 @@ export class TesterHoverProvider implements vscode.HoverProvider {
     }
   }
 
-  private formatMessageId(id: number): string {
-    return formatMessageId(id);
-  }
-
-  private buildMarkdown(info: CanCommandInfo): vscode.MarkdownString | null {
+  private buildMarkdown(
+    info: CanCommandInfo,
+    dbcManager: DbcManager,
+  ): vscode.MarkdownString | null {
     if (info.type === "full_decode") {
-      return this.buildFullDecodeMarkdown(info);
+      return this.buildFullDecodeMarkdown(info, dbcManager);
     } else {
-      return this.buildMessageInfoMarkdown(info);
+      return this.buildMessageInfoMarkdown(info, dbcManager);
     }
   }
 
@@ -136,8 +143,8 @@ export class TesterHoverProvider implements vscode.HoverProvider {
     messageId: number;
     dataBytes: number[];
     nodeType: string;
-  }): vscode.MarkdownString {
-    const result = this.dbcManager.decodeMessageForDisplay(
+  }, dbcManager: DbcManager): vscode.MarkdownString {
+    const result = dbcManager.decodeMessageForDisplay(
       info.messageId,
       info.dataBytes,
     );
@@ -149,7 +156,7 @@ export class TesterHoverProvider implements vscode.HoverProvider {
 
     if (isDecodedDisplayError(result)) {
       md.appendMarkdown(`### ⚠️ 报文解析失败\n\n`);
-      md.appendMarkdown(`**ID**: ${this.formatMessageId(info.messageId)}\n\n`);
+      md.appendMarkdown(`**ID**: ${formatMessageId(info.messageId)}\n\n`);
       md.appendMarkdown(`**数据**: ${dataHex}\n\n`);
       md.appendMarkdown(`**原因**: ${this.escapeMarkdownCell(result.message)}\n\n`);
       return md;
@@ -163,7 +170,7 @@ export class TesterHoverProvider implements vscode.HoverProvider {
     messageId: number;
     bitRange?: string;
     nodeType: string;
-  }): vscode.MarkdownString {
+  }, dbcManager: DbcManager): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.isTrusted = true;
 
@@ -175,7 +182,7 @@ export class TesterHoverProvider implements vscode.HoverProvider {
     }
     md.appendMarkdown(`\n\n`);
 
-    const result = this.dbcManager.getMessageDefinition(info.messageId);
+    const result = dbcManager.getMessageDefinition(info.messageId);
     if (isDecodedDisplayError(result)) {
       md.appendMarkdown(`**DBC**: ${this.escapeMarkdownCell(result.message)}\n\n`);
       return md;
@@ -233,36 +240,28 @@ export class TesterHoverProvider implements vscode.HoverProvider {
       return;
     }
 
-    markdown.appendMarkdown(`| 类型 | 信号名 | 描述 | 位置 | 解析值 |\n`);
-    markdown.appendMarkdown(`|:-----|:-------|:-----|:-----|:-------|\n`);
+    const rows: string[] = [
+      `| 类型 | 信号名 | 描述 | 位置 | 解析值 |`,
+      `|:-----|:-------|:-----|:-----|:-------|`,
+    ];
 
     for (const signal of orderedSignals) {
       const nameCell = signal.multiplexTag
         ? `\`${this.escapeMarkdownCell(signal.name)}\` \`${this.escapeMarkdownCell(signal.multiplexTag)}\``
         : `\`${this.escapeMarkdownCell(signal.name)}\``;
-      markdown.appendMarkdown(
-        `| ${this.getSignalTypeLabel(signal)} | ${nameCell} | ${this.escapeMarkdownCell(signal.description)} | \`${this.escapeMarkdownCell(this.formatSignalPosition(signal, message.hasPayload))}\` | ${this.escapeMarkdownCell(this.formatSignalValue(signal, message.hasPayload))} |\n`,
+      rows.push(
+        `| ${this.getSignalTypeLabel(signal)} | ${nameCell} | ${this.escapeMarkdownCell(signal.description)} | \`${this.escapeMarkdownCell(this.formatSignalPosition(signal, message.hasPayload))}\` | ${this.escapeMarkdownCell(this.formatSignalValue(signal, message.hasPayload))} |`,
       );
     }
 
-    markdown.appendMarkdown(`\n`);
+    markdown.appendMarkdown(rows.join("\n") + "\n\n");
   }
 
   private orderSignals(signals: DecodedDisplaySignal[]) {
-    const multiplexer: DecodedDisplaySignal[] = [];
-    const multiplexed: DecodedDisplaySignal[] = [];
-    const base: DecodedDisplaySignal[] = [];
-    for (const signal of signals) {
-      if (signal.role === "multiplexer") {
-        multiplexer.push(signal);
-      } else if (signal.role === "multiplexed") {
-        multiplexed.push(signal);
-      } else {
-        base.push(signal);
-      }
-    }
-
-    return [...multiplexer, ...multiplexed, ...base];
+    const roleOrder = { multiplexer: 0, multiplexed: 1, base: 2 } as const;
+    return signals.slice().sort(
+      (a, b) => roleOrder[a.role] - roleOrder[b.role],
+    );
   }
 
   private getSignalTypeLabel(signal: DecodedDisplaySignal) {
@@ -304,6 +303,6 @@ export class TesterHoverProvider implements vscode.HoverProvider {
   }
 
   private escapeMarkdownCell(value: string): string {
-    return value.replace(/\|/g, "\\|").replace(/\r?\n/g, "<br/>");
+    return value.replace(PIPE_PATTERN, "\\|").replace(NEWLINE_PATTERN, "<br/>");
   }
 }

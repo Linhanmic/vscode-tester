@@ -27,66 +27,6 @@ const esbuildProblemMatcherPlugin = {
   },
 };
 
-async function copyZlgRuntimePackage(workspaceRoot) {
-  const zlgPackageRoot = path.join(workspaceRoot, "zlg-node");
-  const zlgDistRoot = path.join(
-    __dirname,
-    "dist",
-    "node_modules",
-    "@vscode-tester",
-    "zlg-can",
-  );
-
-  if (!fs.existsSync(zlgPackageRoot)) {
-    console.error("Error: zlg-node workspace package not found.");
-    return;
-  }
-
-  const releaseDir = path.join(zlgPackageRoot, "build", "Release");
-  const nativeModulePath = path.join(releaseDir, "zlg_node.node");
-  if (!fs.existsSync(nativeModulePath)) {
-    console.error("Error: zlg-node native runtime not found. Build ../zlg-node first.");
-    return;
-  }
-
-  const packageJsonPath = path.join(zlgPackageRoot, "package.json");
-  const sourcePackageJson = await fs.readJson(packageJsonPath);
-
-  await fs.remove(zlgDistRoot);
-  await fs.ensureDir(path.join(zlgDistRoot, "build", "Release"));
-
-  await fs.copy(path.join(zlgPackageRoot, "index.js"), path.join(zlgDistRoot, "index.js"));
-  await fs.copy(path.join(zlgPackageRoot, "index.d.ts"), path.join(zlgDistRoot, "index.d.ts"));
-  await fs.copy(path.join(zlgPackageRoot, "lib"), path.join(zlgDistRoot, "lib"));
-  await fs.copy(nativeModulePath, path.join(zlgDistRoot, "build", "Release", "zlg_node.node"));
-
-  const zlgNativeDllPath = path.join(releaseDir, "zlgcan.dll");
-  if (fs.existsSync(zlgNativeDllPath)) {
-    await fs.copy(zlgNativeDllPath, path.join(zlgDistRoot, "build", "Release", "zlgcan.dll"));
-  }
-
-  const kernelDllsPath = path.join(releaseDir, "kerneldlls");
-  if (fs.existsSync(kernelDllsPath)) {
-    await fs.copy(kernelDllsPath, path.join(zlgDistRoot, "build", "Release", "kerneldlls"));
-  }
-
-  await fs.writeJson(
-    path.join(zlgDistRoot, "package.json"),
-    {
-      name: sourcePackageJson.name,
-      version: sourcePackageJson.version,
-      description: sourcePackageJson.description,
-      main: "index.js",
-      types: "index.d.ts",
-      type: "commonjs",
-      license: sourcePackageJson.license,
-    },
-    { spaces: 2 },
-  );
-
-  console.log("Copied @vscode-tester/zlg-can runtime package");
-}
-
 async function copyAssets() {
   const workspaceRoot = path.resolve(__dirname, "..");
   const grammarWasmPath = path.join(
@@ -96,6 +36,8 @@ async function copyAssets() {
   );
   const sourceParsersDir = path.join(__dirname, "parsers");
   const distParsersDir = path.join(__dirname, "dist", "parsers");
+  const distNodeModulesDir = path.join(__dirname, "dist", "node_modules");
+  const distWebviewDir = path.join(__dirname, "dist", "webview");
 
   if (fs.existsSync(grammarWasmPath)) {
     await fs.ensureDir(sourceParsersDir);
@@ -107,20 +49,43 @@ async function copyAssets() {
     console.error("Error: tree-sitter-tester.wasm not found in sibling workspace.");
   }
 
+  await fs.remove(path.join(distNodeModulesDir, "@vscode-tester"));
+  await fs.remove(path.join(distNodeModulesDir, "web-tree-sitter"));
+  await fs.remove(distWebviewDir);
+
   const webTreeSitterPath = path.join(
     __dirname,
     "node_modules",
     "web-tree-sitter",
   );
   if (fs.existsSync(webTreeSitterPath)) {
-    await fs.copy(webTreeSitterPath, "./dist/node_modules/web-tree-sitter");
-    console.log("Copied web-tree-sitter to dist/node_modules/web-tree-sitter");
+    await fs.ensureDir(distNodeModulesDir);
+    const webTreeSitterDistDir = path.join(distNodeModulesDir, "web-tree-sitter");
+    await fs.ensureDir(webTreeSitterDistDir);
+    await Promise.all([
+      fs.copy(
+        path.join(webTreeSitterPath, "package.json"),
+        path.join(webTreeSitterDistDir, "package.json"),
+      ),
+      fs.copy(
+        path.join(webTreeSitterPath, "LICENSE"),
+        path.join(webTreeSitterDistDir, "LICENSE"),
+      ),
+      fs.copy(
+        path.join(webTreeSitterPath, "web-tree-sitter.cjs"),
+        path.join(webTreeSitterDistDir, "web-tree-sitter.cjs"),
+      ),
+      fs.copy(
+        path.join(webTreeSitterPath, "web-tree-sitter.wasm"),
+        path.join(webTreeSitterDistDir, "web-tree-sitter.wasm"),
+      ),
+    ]);
+    console.log("Copied minimal web-tree-sitter runtime");
   } else {
     console.error(
       'Error: web-tree-sitter not found in node_modules. Run "npm install" first.',
     );
   }
-  await copyZlgRuntimePackage(workspaceRoot);
 }
 
 async function main() {
@@ -133,7 +98,7 @@ async function main() {
     sourcesContent: false,
     platform: "node",
     outfile: "dist/extension.js",
-    external: ["vscode", "web-tree-sitter", "@vscode-tester/zlg-can"],
+    external: ["vscode", "web-tree-sitter"],
     logLevel: "silent",
     plugins: [
       /* add to the end of plugins array */

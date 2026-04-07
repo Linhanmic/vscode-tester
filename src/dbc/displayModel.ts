@@ -48,11 +48,6 @@ export interface DecodedDisplayError {
 
 export type DbcDisplayResult = DecodedDisplayMessage | DecodedDisplayError;
 
-interface BitPosition {
-  byte: number;
-  bit: number;
-}
-
 export function isDecodedDisplayError(
   result: DbcDisplayResult,
 ): result is DecodedDisplayError {
@@ -70,15 +65,16 @@ export function formatDisplayDataBytes(dataBytes: readonly number[]): string {
 }
 
 export function formatSignalLocation(signal: Signal): string {
-  const positions = collectSignalBitPositions(signal);
-  if (positions.length === 0) {
+  if (signal.length <= 0) {
     return "-";
   }
 
-  positions.sort(compareBitPosition);
-  const start = positions[0];
-  const end = positions[positions.length - 1];
-  return `${start.byte}.${start.bit}-${end.byte}.${end.bit}`;
+  const range = computeSignalBitRange(signal);
+  if (!range) {
+    return "-";
+  }
+
+  return `${range.startByte}.${range.startBit}-${range.endByte}.${range.endBit}`;
 }
 
 export function buildMessageDefinitionDisplay(
@@ -102,7 +98,7 @@ export function buildMessageDefinitionDisplay(
     dataText: "-",
     hasPayload: false,
     multiplexerName,
-    signals: buildDisplaySignals(message, undefined, undefined, extendedSelectors),
+    signals: buildDisplaySignals(message, undefined, undefined, extendedSelectors, multiplexerName),
   };
 }
 
@@ -139,6 +135,7 @@ export function buildDecodedMessageDisplay(
       boundSignals,
       multiplexerValue,
       extendedSelectors,
+      multiplexerName,
     ),
   };
 }
@@ -148,6 +145,7 @@ function buildDisplaySignals(
   boundSignals: Map<string, BoundSignal> | undefined,
   activeMultiplexerValue: number | undefined,
   extendedSelectors: Map<string, number[]>,
+  multiplexerName: string | undefined,
 ): DecodedDisplaySignal[] {
   const activeMultiplexedSignalNames =
     activeMultiplexerValue === undefined
@@ -156,6 +154,7 @@ function buildDisplaySignals(
           message,
           activeMultiplexerValue,
           extendedSelectors,
+          multiplexerName,
         );
 
   const signals: DecodedDisplaySignal[] = [];
@@ -198,9 +197,9 @@ function collectActiveMultiplexedSignalNames(
   message: Message,
   activeMultiplexerValue: number,
   extendedSelectors: Map<string, number[]>,
+  multiplexerName: string | undefined,
 ): Set<string> {
   const activeNames = new Set<string>();
-  const multiplexerName = findMultiplexerName(message);
 
   for (const [name, signal] of message.signals) {
     const selectorValue = parseStandardMultiplexValue(signal.multiplex);
@@ -296,7 +295,7 @@ function resolveMultiplexTag(
     return `m${activeMultiplexerValue}`;
   }
 
-  const sorted = [...new Set(extendedSelectors)].sort((left, right) => left - right);
+  const sorted = Array.from(new Set(extendedSelectors)).sort((left, right) => left - right);
   if (sorted.length === 1) {
     return `m${sorted[0]}`;
   }
@@ -325,17 +324,23 @@ function formatSelectorRange(start: number, end: number) {
   return start === end ? `${start}` : `${start}-${end}`;
 }
 
+const STANDARD_MULTIPLEX_PATTERN = /^m(\d+)$/i;
+const multiplexValueCache = new Map<string, number | null>();
+
 function parseStandardMultiplexValue(value: string | null): number | null {
   if (!value) {
     return null;
   }
 
-  const match = value.match(/^m(\d+)$/i);
-  if (!match) {
-    return null;
+  const cached = multiplexValueCache.get(value);
+  if (cached !== undefined) {
+    return cached;
   }
 
-  return Number.parseInt(match[1], 10);
+  const match = value.match(STANDARD_MULTIPLEX_PATTERN);
+  const result = match ? Number.parseInt(match[1], 10) : null;
+  multiplexValueCache.set(value, result);
+  return result;
 }
 
 function findMultiplexerName(message: Message): string | undefined {
@@ -347,57 +352,46 @@ function findMultiplexerName(message: Message): string | undefined {
   return undefined;
 }
 
-function collectSignalBitPositions(signal: Signal): BitPosition[] {
+interface BitRange {
+  startByte: number;
+  startBit: number;
+  endByte: number;
+  endBit: number;
+}
+
+function computeSignalBitRange(signal: Signal): BitRange | null {
   if (signal.length <= 0) {
-    return [];
+    return null;
   }
 
   if (signal.endian === "Intel") {
-    const positions: BitPosition[] = [];
-    for (let offset = 0; offset < signal.length; offset += 1) {
-      const absoluteBit = signal.startBit + offset;
-      positions.push({
-        byte: Math.floor(absoluteBit / 8) + 1,
-        bit: absoluteBit % 8,
-      });
-    }
-    return positions;
+    const firstBit = signal.startBit;
+    const lastBit = signal.startBit + signal.length - 1;
+    return {
+      startByte: Math.floor(firstBit / 8) + 1,
+      startBit: firstBit % 8,
+      endByte: Math.floor(lastBit / 8) + 1,
+      endBit: lastBit % 8,
+    };
   }
 
-  return collectMotorolaBitPositions(signal.startBit, signal.length);
-}
+  // Motorola: compute start and end positions directly
+  const endSeqIndex = 8 * Math.floor(signal.startBit / 8) + (7 - (signal.startBit % 8));
+  const startSeqIndex = endSeqIndex - signal.length + 1;
 
-function collectMotorolaBitPositions(
-  startBit: number,
-  length: number,
-): BitPosition[] {
-  const endSequentialIndex =
-    8 * Math.floor(startBit / 8) + (7 - (startBit % 8));
-  const startSequentialIndex = endSequentialIndex - length + 1;
-  const positions: BitPosition[] = [];
+  const startByteIndex = Math.floor(startSeqIndex / 8);
+  const startBitFromMsb = startSeqIndex % 8;
+  const endByteIndex = Math.floor(endSeqIndex / 8);
+  const endBitFromMsb = endSeqIndex % 8;
 
-  for (
-    let sequentialIndex = startSequentialIndex;
-    sequentialIndex <= endSequentialIndex;
-    sequentialIndex += 1
-  ) {
-    const byteIndex = Math.floor(sequentialIndex / 8);
-    const bitIndexWithinByteFromMsb = sequentialIndex % 8;
-    positions.push({
-      byte: byteIndex + 1,
-      bit: 7 - bitIndexWithinByteFromMsb,
-    });
+  // Sort by byte.bit ascending
+  const s = { byte: startByteIndex + 1, bit: 7 - startBitFromMsb };
+  const e = { byte: endByteIndex + 1, bit: 7 - endBitFromMsb };
+
+  if (s.byte < e.byte || (s.byte === e.byte && s.bit < e.bit)) {
+    return { startByte: s.byte, startBit: s.bit, endByte: e.byte, endBit: e.bit };
   }
-
-  return positions;
-}
-
-function compareBitPosition(left: BitPosition, right: BitPosition) {
-  if (left.byte !== right.byte) {
-    return left.byte - right.byte;
-  }
-
-  return left.bit - right.bit;
+  return { startByte: e.byte, startBit: e.bit, endByte: s.byte, endBit: s.bit };
 }
 
 function formatRawValueHex(rawValue: number): string {

@@ -32,15 +32,3 @@ export interface ExtractedCommand {
 
 // Command type
 export type TesterCommandType = "tcans" | "tcanr";
-
-// DBC bound signal
-export interface BoundSignal {
-  physValue?: string;
-  value: number;
-  rawValue: number;
-}
-
-// DBC signal definition
-export interface SignalDefinition {
-  description?: string;
-}

@@ -2,6 +2,8 @@ import * as vscode from "vscode";
 import { Node } from "web-tree-sitter";
 import { TreeManager } from "../parser/treeManager";
 
+const QUOTE_PATTERN = /^["']|["']$/g;
+
 export class TesterDocumentSymbolProvider
   implements vscode.DocumentSymbolProvider
 {
@@ -13,48 +15,45 @@ export class TesterDocumentSymbolProvider
     const tree = this.treeManager.getTree(document);
     const symbols: vscode.DocumentSymbol[] = [];
 
-    const walk = (node: Node, parentSuite?: vscode.DocumentSymbol) => {
-      switch (node.type) {
-        case "configuration_block":
-          symbols.push(
-            new vscode.DocumentSymbol(
-              "Configuration",
-              "",
-              vscode.SymbolKind.Module,
-              this.nodeToRange(node),
-              this.nodeToRange(node),
-            ),
-          );
-          break;
+    // Only iterate top-level children of the root node.
+    // test_suite and configuration_block are always top-level;
+    // test_case is always a direct child of test_suite.
+    // This avoids a full recursive traversal of the entire tree.
+    for (let i = 0; i < tree.rootNode.childCount; i++) {
+      const node = tree.rootNode.child(i);
+      if (!node) { continue; }
 
-        case "test_suite":
-          const titleNode = node.childForFieldName("title");
-          const title = titleNode
-            ? this.cleanString(titleNode.text)
-            : "Test Suite";
-
-          const suiteSymbol = new vscode.DocumentSymbol(
-            title,
+      if (node.type === "configuration_block") {
+        symbols.push(
+          new vscode.DocumentSymbol(
+            "Configuration",
             "",
-            vscode.SymbolKind.Class,
+            vscode.SymbolKind.Module,
             this.nodeToRange(node),
             this.nodeToRange(node),
-          );
+          ),
+        );
+      } else if (node.type === "test_suite") {
+        const titleNode = node.childForFieldName("title");
+        const title = titleNode
+          ? this.cleanString(titleNode.text)
+          : "Test Suite";
 
-          symbols.push(suiteSymbol);
+        const suiteSymbol = new vscode.DocumentSymbol(
+          title,
+          "",
+          vscode.SymbolKind.Class,
+          this.nodeToRange(node),
+          this.nodeToRange(node),
+        );
 
-          for (let i = 0; i < node.childCount; i++) {
-            const child = node.child(i);
-            if (child) {walk(child, suiteSymbol);}
-          }
+        // Collect test cases from direct children only
+        for (let j = 0; j < node.childCount; j++) {
+          const child = node.child(j);
+          if (!child || child.type !== "test_case") { continue; }
 
-          return;
-
-        case "test_case":
-          if (!parentSuite) {break;}
-
-          const idNode = node.childForFieldName("id");
-          const titleNode2 = node.childForFieldName("title");
+          const idNode = child.childForFieldName("id");
+          const titleNode2 = child.childForFieldName("title");
 
           const id = idNode ? idNode.text : "";
           const caseTitle = titleNode2
@@ -63,25 +62,21 @@ export class TesterDocumentSymbolProvider
 
           const label = id ? `${id}. ${caseTitle}` : caseTitle;
 
-          parentSuite.children.push(
+          suiteSymbol.children.push(
             new vscode.DocumentSymbol(
               label,
               "",
               vscode.SymbolKind.Method,
-              this.nodeToRange(node),
-              this.nodeToRange(node),
+              this.nodeToRange(child),
+              this.nodeToRange(child),
             ),
           );
-          break;
-      }
+        }
 
-      for (let i = 0; i < node.childCount; i++) {
-        const child = node.child(i);
-        if (child) {walk(child, parentSuite);}
+        symbols.push(suiteSymbol);
       }
-    };
+    }
 
-    walk(tree.rootNode);
     return symbols;
   }
 
@@ -95,6 +90,7 @@ export class TesterDocumentSymbolProvider
   }
 
   private cleanString(str: string): string {
-    return str.replace(/^["']|["']$/g, "").trim();
+    QUOTE_PATTERN.lastIndex = 0;
+    return str.replace(QUOTE_PATTERN, "").trim();
   }
 }

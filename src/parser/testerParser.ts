@@ -26,7 +26,13 @@ async function loadLanguageInternal() {
   parser.setLanguage(tester);
 }
 
+let cachedWasmPath: string | undefined;
+
 function resolveWasmPath(): string {
+  if (cachedWasmPath) {
+    return cachedWasmPath;
+  }
+
   const candidates = [
     path.join(__dirname, "parsers", "tree-sitter-tester.wasm"),
     path.join(__dirname, "..", "parsers", "tree-sitter-tester.wasm"),
@@ -40,5 +46,6 @@ function resolveWasmPath(): string {
     throw new Error("Failed to locate tree-sitter-tester.wasm");
   }
 
+  cachedWasmPath = wasmPath;
   return wasmPath;
 }

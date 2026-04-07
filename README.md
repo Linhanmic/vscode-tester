@@ -7,12 +7,8 @@
 - 语法高亮：关键字、报文 ID、字节数据、注释等高亮显示
 - 智能补全：输入 `tcans` / `tcanr` 时，补全当前文件中的同类命令
 - 悬停信息：结合 DBC 文件显示报文和信号解码信息
-- 语法诊断：基于 tree-sitter 解析结果标记语法错误
 - 大纲视图：显示配置块、测试集、测试用例层级
 - 代码折叠：折叠配置块、测试集、测试用例
-- CodeLens 运行：可直接运行测试用例或测试集
-- CAN 执行器：串行执行测试集中的测试用例，按 DSL 语义调度 `tcans` / `tcanr` / `tdelay`
-- 总线监视侧边栏：查看当前运行状态、活动发送任务和最近总线报文
 - 代码片段：内置常用 Tester 模板
 
 ## 安装
@@ -39,14 +35,6 @@ npm run package
 输入 `ttemplate` 并按 `Tab` 可插入模板。一个当前稳定可解析的最小示例如下：
 
 ```tester
-tset
-  tcaninit 41,0,0,500,2000
-  tdiagnose_rid 7A1
-  tdiagnose_sid 7A9
-  tdiagnose_keyk 10086
-  tdiagnose_dtc C10087,发动机过热
-tend
-
 ttitle=基本通信测试
   tstart=发送报文验证
     tcans 18FF0012,11-22-33-44-55-66-77-88,100,1
@@ -56,8 +44,6 @@ ttitle=基本通信测试
 ttitle-end
 ```
 
-完整语法规范见 [docs/tester-syntax.md](docs/tester-syntax.md)。
-
 ## 配置项
 
 在 VS Code 设置中搜索 `tester` 可找到以下配置：
@@ -65,8 +51,6 @@ ttitle-end
 | 配置项 | 类型 | 默认值 | 说明 |
 |------|------|------|------|
 | `tester.dbcFilePath` | string | `""` | DBC 文件路径。为空时自动搜索工作区中的第一个 `.dbc` 文件 |
-| `tester.diagnostics.enabled` | boolean | `true` | 是否启用语法诊断 |
-| `tester.execution.defaultReceiveTimeoutMs` | number | `3000` | `tcanr ...,print` 的默认等待超时时间，单位毫秒 |
 
 ## 代码片段
 
@@ -81,8 +65,6 @@ ttitle-end
 | `tcanr-print` | CAN 接收打印命令 |
 | `tdelay` | 延时命令 |
 | `tcaninit` | 通道初始化 |
-| `tdiag` | 诊断配置模板 |
-| `tdtc` | 故障码配置模板 |
 
 ## DBC 悬停
 
@@ -97,8 +79,7 @@ ttitle-end
 ## 说明
 
 - 当前语法规范以 `tree-sitter` 实现为准。
-- `tcaninit` 中的波特率单位为 `kbps`，例如 `500` 表示 `500000 bps`。
-- 历史草稿中的部分设计语法尚未被当前扩展正式支持，详见 [docs/tester-syntax.md](docs/tester-syntax.md) 中的“已知限制与规划中能力”。
+- 当前仓库只保留基础语言支持能力，未启用运行器、Studio 和监控类功能。
 
 ## 许可证
 

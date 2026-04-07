@@ -21,22 +21,15 @@
     "vscode": "^1.109.0"
   },
   "activationEvents": [
-    "onLanguage:tester",
-    "onCommand:tester.openStudio",
-    "onCommand:tester.runTestSuite",
-    "onCommand:tester.runTestCase",
-    "onCommand:tester.runTestCommand",
-    "onCommand:tester.busMonitor.clear"
+    "onLanguage:tester"
   ],
   "categories": [
     "Programming Languages",
-    "Linters",
     "Snippets"
   ],
   "keywords": [
     "tester",
     "autocompletion",
-    "validation",
     "CAN",
     "automotive"
   ],
@@ -76,66 +69,8 @@
           "type": "string",
           "default": "",
           "description": "DBC 文件路径。为空时自动搜索工作区中的第一个 .dbc 文件。"
-        },
-        "tester.diagnostics.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "启用语法诊断"
-        },
-        "tester.execution.defaultReceiveTimeoutMs": {
-          "type": "number",
-          "default": 3000,
-          "minimum": 1,
-          "description": "tcanr print 命令未显式指定等待时间时使用的默认超时时间，单位毫秒。"
         }
       }
-    },
-    "commands": [
-      {
-        "command": "tester.openStudio",
-        "title": "Tester: 打开 Studio",
-        "icon": "$(preview)"
-      },
-      {
-        "command": "tester.runTestSuite",
-        "title": "Tester: 运行测试集"
-      },
-      {
-        "command": "tester.runTestCase",
-        "title": "Tester: 运行测试用例"
-      },
-      {
-        "command": "tester.runTestCommand",
-        "title": "Tester: 运行到命令"
-      },
-      {
-        "command": "tester.busMonitor.clear",
-        "title": "Tester: 清空总线监视",
-        "icon": "$(clear-all)"
-      }
-    ],
-    "menus": {
-      "editor/title": [
-        {
-          "command": "tester.openStudio",
-          "when": "resourceLangId == tester",
-          "group": "navigation@1"
-        }
-      ],
-      "explorer/context": [
-        {
-          "command": "tester.openStudio",
-          "when": "resourceLangId == tester",
-          "group": "navigation@1"
-        }
-      ],
-      "editor/context": [
-        {
-          "command": "tester.openStudio",
-          "when": "resourceLangId == tester",
-          "group": "navigation@1"
-        }
-      ]
     }
   },
   "files": [
@@ -143,28 +78,23 @@
   ],
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && npm run check-types:webview && npm run lint && node esbuild.js && npm run build:webview",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
-    "watch:webview": "vite build --watch --config webview/vite.config.ts",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run check-types:webview && npm run lint && node esbuild.js --production && npm run build:webview",
-    "build:webview": "vite build --config webview/vite.config.ts",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
-    "check-types:webview": "vue-tsc --project webview/tsconfig.json --noEmit",
     "lint": "eslint src",
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.2.4",
     "@types/emscripten": "^1.41.5",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@types/vscode": "^1.109.0",
-    "@vscode-tester/zlg-can": "file:../zlg-node",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "candied": "^2.2.0",
@@ -174,9 +104,6 @@
     "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.54.0",
-    "vue": "^3.5.22",
-    "vite": "^5.4.20",
-    "vue-tsc": "^2.2.12",
     "web-tree-sitter": "^0.26.6"
   }
 }

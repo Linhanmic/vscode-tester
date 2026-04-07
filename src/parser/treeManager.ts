@@ -1,25 +1,37 @@
 import * as vscode from "vscode";
 import { Edit, Tree } from "web-tree-sitter";
 import { parser } from "./testerParser";
+import { LANGUAGE_ID } from "../constants";
 
 // 初始目的:使用增量解析来提高性能，避免每次文档变化都重新解析整个文本
 // 语法树管理器，负责维护每个打开的文档对应的语法树，并在文档内容变化时更新语法树
-export class TreeManager {
+export class TreeManager implements vscode.Disposable {
   // 使用文档 URI 作为键，存储对应的语法树
   private trees = new Map<string, Tree>();
+  private readonly disposables: vscode.Disposable[] = [];
 
   constructor(context: vscode.ExtensionContext) {
-    context.subscriptions.push(
+    this.disposables.push(
       vscode.workspace.onDidChangeTextDocument((e) => {
-        this.updateTree(e);
+        if (e.document.languageId === LANGUAGE_ID) {
+          this.updateTree(e);
+        }
       }),
-    );
-
-    context.subscriptions.push(
       vscode.workspace.onDidCloseTextDocument((doc) => {
         this.disposeTree(doc.uri.toString());
       }),
     );
+    context.subscriptions.push(this);
+  }
+
+  dispose() {
+    for (const tree of this.trees.values()) {
+      tree.delete();
+    }
+    this.trees.clear();
+    for (const d of this.disposables) {
+      d.dispose();
+    }
   }
 
   // 获取指定文档的语法树，如果不存在则创建并缓存
@@ -72,6 +84,8 @@ export class TreeManager {
       console.error("Failed to parse document after edit, new tree is null");
       return;
     }
+    // Free the old tree's native memory before replacing
+    oldTree.delete();
     this.trees.set(key, newTree);
   }
 

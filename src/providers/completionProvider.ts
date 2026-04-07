@@ -4,9 +4,14 @@ import { TreeManager } from "../parser/treeManager";
 import { CAN_COMMAND_NODE_TYPES } from "../constants";
 import { ExtractedCommand, TesterCommandType } from "../types";
 
+const COMMAND_PREFIX_PATTERN = /^\s*(tcans|tcanr)/;
+
 export class TesterCompletionProvider implements vscode.CompletionItemProvider {
   private treeManager: TreeManager;
   private commandInfoMap = new WeakMap<vscode.CompletionItem, ExtractedCommand>();
+
+  // Cache extracted commands per document version to avoid re-traversing the tree
+  private commandCache = new Map<string, { version: number; tcans: ExtractedCommand[]; tcanr: ExtractedCommand[] }>();
 
   constructor(treeManager: TreeManager) {
     this.treeManager = treeManager;
@@ -19,33 +24,17 @@ export class TesterCompletionProvider implements vscode.CompletionItemProvider {
     context: vscode.CompletionContext,
   ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
     try {
-      const tree = this.treeManager.getTree(document);
-      const positionOffset = document.offsetAt(position);
-
-      const currentNode = this.getNodeAtPosition(
-        tree.rootNode,
-        positionOffset,
-      );
-
-      if (!currentNode) {
-        return [];
-      }
-
-      const completionItems = this.extractCommandsFromTree(tree, document);
-
       const lineText = document.lineAt(position.line).text;
       const linePrefix = lineText.substring(0, position.character);
       const currentCommandType = this.getCurrentCommandType(linePrefix);
 
+      // Early exit before any tree work if not in a command context
       if (!currentCommandType) {
         return [];
       }
 
-      const filteredCommands = completionItems.filter(
-        (item) => item.commandType === currentCommandType,
-      );
-
-      const uniqueCommands = this.deduplicateCommands(filteredCommands);
+      const tree = this.treeManager.getTree(document);
+      const uniqueCommands = this.getCachedCommands(document, tree, currentCommandType);
 
       return uniqueCommands.map((cmd) => {
         const item = new vscode.CompletionItem(
@@ -69,8 +58,37 @@ export class TesterCompletionProvider implements vscode.CompletionItemProvider {
     }
   }
 
+  private getCachedCommands(
+    document: vscode.TextDocument,
+    tree: Tree,
+    commandType: TesterCommandType,
+  ): ExtractedCommand[] {
+    const key = document.uri.toString();
+    const cached = this.commandCache.get(key);
+
+    if (cached && cached.version === document.version) {
+      return commandType === "tcans" ? cached.tcans : cached.tcanr;
+    }
+
+    const allCommands = this.extractCommandsFromTree(tree, document);
+    const tcansCommands = this.deduplicateCommands(
+      allCommands.filter((c) => c.commandType === "tcans"),
+    );
+    const tcanrCommands = this.deduplicateCommands(
+      allCommands.filter((c) => c.commandType === "tcanr"),
+    );
+
+    this.commandCache.set(key, {
+      version: document.version,
+      tcans: tcansCommands,
+      tcanr: tcanrCommands,
+    });
+
+    return commandType === "tcans" ? tcansCommands : tcanrCommands;
+  }
+
   private getCurrentCommandType(linePrefix: string): TesterCommandType | null {
-    const match = linePrefix.match(/^\s*(tcans|tcanr)/);
+    const match = linePrefix.match(COMMAND_PREFIX_PATTERN);
     return match ? (match[1] as TesterCommandType) : null;
   }
 
@@ -180,35 +198,39 @@ export class TesterCompletionProvider implements vscode.CompletionItemProvider {
     }
 
     // Check next line for tnote
-    if (commandEndLine + 1 < document.lineCount) {
-      const nextLine = document.lineAt(commandEndLine + 1);
-      if (nextLine.text.trim().startsWith("tnote =")) {
-        const match = nextLine.text.match(/tnote\s*=\s*(.+)/);
-        if (match) {
-          return match[1].trim();
-        }
-      }
-    }
+    // if (commandEndLine + 1 < document.lineCount) {
+    //   const nextLine = document.lineAt(commandEndLine + 1);
+    //   if (nextLine.text.trim().startsWith("tnote =")) {
+    //     const match = nextLine.text.match(/tnote\s*=\s*(.+)/);
+    //     if (match) {
+    //       return match[1].trim();
+    //     }
+    //   }
+    // }
 
     // Check previous line for comment or tnote
-    if (commandStartLine > 0) {
-      const prevLine = document.lineAt(commandStartLine - 1);
-      const prevLineTrimmed = prevLine.text.trim();
+    // if (commandStartLine > 0) {
+    //   const prevLine = document.lineAt(commandStartLine - 1);
+    //   const prevLineTrimmed = prevLine.text.trim();
 
-      if (prevLineTrimmed.startsWith("//")) {
-        return prevLineTrimmed.substring(2).trim();
-      } else if (prevLineTrimmed.startsWith("tnote =")) {
-        const match = prevLineTrimmed.match(/tnote\s*=\s*(.+)/);
-        if (match) {
-          return match[1].trim();
-        }
-      }
-    }
+    //   if (prevLineTrimmed.startsWith("//")) {
+    //     return prevLineTrimmed.substring(2).trim();
+    //   } else if (prevLineTrimmed.startsWith("tnote =")) {
+    //     const match = prevLineTrimmed.match(/tnote\s*=\s*(.+)/);
+    //     if (match) {
+    //       return match[1].trim();
+    //     }
+    //   }
+    // }
 
     return null;
   }
 
   private traverseTree(node: Node, callback: (node: Node) => void) {
+    // Skip comment nodes entirely - they cannot contain commands
+    if (node.type === "comment") {
+      return;
+    }
     callback(node);
     for (let i = 0; i < node.childCount; i++) {
       const child = node.child(i);
@@ -216,24 +238,6 @@ export class TesterCompletionProvider implements vscode.CompletionItemProvider {
         this.traverseTree(child, callback);
       }
     }
-  }
-
-  private getNodeAtPosition(node: Node, offset: number): Node | null {
-    if (offset < node.startIndex || offset > node.endIndex) {
-      return null;
-    }
-
-    for (let i = 0; i < node.childCount; i++) {
-      const child = node.child(i);
-      if (child) {
-        const found = this.getNodeAtPosition(child, offset);
-        if (found) {
-          return found;
-        }
-      }
-    }
-
-    return node;
   }
 
   private deduplicateCommands(

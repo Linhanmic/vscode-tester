@@ -13,7 +13,10 @@ function createExtensionContext() {
 
 async function withHoverProvider(
   dbcContent: string,
-  callback: (provider: TesterHoverProvider) => Promise<void>,
+  callback: (
+    provider: TesterHoverProvider,
+    manager: DbcManager,
+  ) => Promise<void>,
 ) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hover-provider-"));
   const dbcPath = path.join(tempDir, "test.dbc");
@@ -22,8 +25,11 @@ async function withHoverProvider(
   try {
     const manager = new DbcManager(createExtensionContext());
     await manager.loadDbcFile(dbcPath);
-    const provider = new TesterHoverProvider({} as TreeManager, manager);
-    await callback(provider);
+    const provider = new TesterHoverProvider(
+      {} as TreeManager,
+      async () => manager,
+    );
+    await callback(provider, manager);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
@@ -46,12 +52,12 @@ suite("TesterHoverProvider", () => {
       'CM_ SG_ 100 SigB "支路 B";',
     ].join("\n");
 
-    await withHoverProvider(dbcContent, async (provider) => {
+    await withHoverProvider(dbcContent, async (provider, manager) => {
       const markdown = (provider as any).buildFullDecodeMarkdown({
         messageId: 100,
         dataBytes: [1, 0x22, 0x33],
         nodeType: "tcans_command",
-      }) as vscode.MarkdownString;
+      }, manager) as vscode.MarkdownString;
 
       assert.ok(
         markdown.value.includes("| 类型 | 信号名 | 描述 | 位置 | 解析值 |"),
@@ -94,12 +100,12 @@ suite("TesterHoverProvider", () => {
       'CM_ SG_ 256 Sig "打印信号";',
     ].join("\n");
 
-    await withHoverProvider(dbcContent, async (provider) => {
+    await withHoverProvider(dbcContent, async (provider, manager) => {
       const markdown = (provider as any).buildMessageInfoMarkdown({
         messageId: 256,
         bitRange: "0.0-0.7",
         nodeType: "tcanr_print_command",
-      }) as vscode.MarkdownString;
+      }, manager) as vscode.MarkdownString;
 
       assert.ok(markdown.value.includes("模式"));
       assert.ok(markdown.value.includes("PrintMsg"));

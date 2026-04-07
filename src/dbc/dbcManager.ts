@@ -144,7 +144,7 @@ export class DbcManager {
   }
 
   getStatus(): DbcManagerStatus {
-    return { ...this.status };
+    return this.status;
   }
 
   get onDidChangeStatus(): vscode.Event<DbcManagerStatus> {
@@ -278,9 +278,10 @@ export class DbcManager {
     message: Message,
     dataBytes: readonly number[],
   ): Map<string, BoundSignal> {
+    const mutableBytes = [...dataBytes];
     const boundSignals = new Map<string, BoundSignal>();
     for (const [name, signal] of message.signals) {
-      boundSignals.set(name, this.can.decodeSignal([...dataBytes], signal));
+      boundSignals.set(name, this.can.decodeSignal(mutableBytes, signal));
     }
     return boundSignals;
   }
@@ -301,8 +302,8 @@ export class DbcManager {
   }
 
   private updateStatus(status: DbcManagerStatus) {
-    this.status = { ...status };
-    this.statusEmitter.fire(this.getStatus());
+    this.status = status;
+    this.statusEmitter.fire(status);
   }
 
   private async findFirstWorkspaceDbcPath() {
