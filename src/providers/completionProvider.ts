@@ -8,10 +8,16 @@ const COMMAND_PREFIX_PATTERN = /^\s*(tcans|tcanr)/;
 
 export class TesterCompletionProvider implements vscode.CompletionItemProvider {
   private treeManager: TreeManager;
-  private commandInfoMap = new WeakMap<vscode.CompletionItem, ExtractedCommand>();
+  private commandInfoMap = new WeakMap<
+    vscode.CompletionItem,
+    ExtractedCommand
+  >();
 
   // Cache extracted commands per document version to avoid re-traversing the tree
-  private commandCache = new Map<string, { version: number; tcans: ExtractedCommand[]; tcanr: ExtractedCommand[] }>();
+  private commandCache = new Map<
+    string,
+    { version: number; tcans: ExtractedCommand[]; tcanr: ExtractedCommand[] }
+  >();
 
   constructor(treeManager: TreeManager) {
     this.treeManager = treeManager;
@@ -34,7 +40,11 @@ export class TesterCompletionProvider implements vscode.CompletionItemProvider {
       }
 
       const tree = this.treeManager.getTree(document);
-      const uniqueCommands = this.getCachedCommands(document, tree, currentCommandType);
+      const uniqueCommands = this.getCachedCommands(
+        document,
+        tree,
+        currentCommandType,
+      );
 
       return uniqueCommands.map((cmd) => {
         const item = new vscode.CompletionItem(
@@ -42,7 +52,9 @@ export class TesterCompletionProvider implements vscode.CompletionItemProvider {
           vscode.CompletionItemKind.Snippet,
         );
 
-        item.insertText = new vscode.SnippetString(cmd.insertText);
+        item.insertText = new vscode.SnippetString(
+          cmd.insertText + "// " + cmd.label,
+        );
         item.detail = cmd.detail;
         item.documentation = cmd.documentation;
         item.sortText = cmd.sortText;
@@ -58,6 +70,7 @@ export class TesterCompletionProvider implements vscode.CompletionItemProvider {
     }
   }
 
+  // 获取缓存的数据
   private getCachedCommands(
     document: vscode.TextDocument,
     tree: Tree,
@@ -70,6 +83,7 @@ export class TesterCompletionProvider implements vscode.CompletionItemProvider {
       return commandType === "tcans" ? cached.tcans : cached.tcanr;
     }
 
+    // 没有缓存就重新缓存
     const allCommands = this.extractCommandsFromTree(tree, document);
     const tcansCommands = this.deduplicateCommands(
       allCommands.filter((c) => c.commandType === "tcans"),
@@ -141,6 +155,7 @@ export class TesterCompletionProvider implements vscode.CompletionItemProvider {
     let documentation: vscode.MarkdownString;
     let sortText: string;
     let filterText: string;
+    let insertText: string;
 
     if (commentText) {
       label = commentText;
@@ -150,17 +165,19 @@ export class TesterCompletionProvider implements vscode.CompletionItemProvider {
       );
       sortText = `0_${commentText}`;
       filterText = `${commentText} ${commandText}`;
+      insertText = this.extractCoreCommand(commandText) + "// " + commentText;
     } else {
       label = commandText;
       detail = `${commandType} 命令`;
       documentation = new vscode.MarkdownString(`\`${commandText}\``);
       sortText = `1_${commandText}`;
       filterText = commandText;
+      insertText = this.extractCoreCommand(commandText);
     }
 
     return {
       commandType,
-      insertText: this.extractCoreCommand(commandText),
+      insertText,
       label,
       detail,
       documentation,
