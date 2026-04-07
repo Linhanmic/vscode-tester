@@ -2,7 +2,7 @@
   "name": "vscode-tester",
   "displayName": "Tester Language Support by Linhanmic",
   "description": "Tester Language Support by Linhanmic",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "author": "Linhanmic",
   "icon": "icons/icon.png",
   "contributors": [
