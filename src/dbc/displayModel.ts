@@ -175,7 +175,7 @@ function buildDisplaySignals(
       description: signal.description ?? "-",
       locationText: formatSignalLocation(signal),
       physValueText: boundSignal
-        ? (boundSignal.physValue?.trim() || `${boundSignal.value}`)
+        ? resolvePhysValueText(signal, boundSignal)
         : "-",
       rawValueText: boundSignal ? `${boundSignal.rawValue}` : "-",
       rawValueHexText: boundSignal
@@ -392,6 +392,21 @@ function computeSignalBitRange(signal: Signal): BitRange | null {
     return { startByte: s.byte, startBit: s.bit, endByte: e.byte, endBit: e.bit };
   }
   return { startByte: e.byte, startBit: e.bit, endByte: s.byte, endBit: s.bit };
+}
+
+/**
+ * 用实际物理值查值表，不做 min/max 截断，避免 candied 截断后错误映射值表。
+ */
+function resolvePhysValueText(signal: Signal, boundSignal: BoundSignal): string {
+  const physValue = boundSignal.rawValue * signal.factor + signal.offset;
+  if (signal.valueTable) {
+    const label = signal.valueTable.get(physValue);
+    if (label) {
+      return label;
+    }
+  }
+  const display = physValue.toString();
+  return signal.unit ? `${display} ${signal.unit}` : display;
 }
 
 function formatRawValueHex(rawValue: number): string {
