@@ -2,7 +2,7 @@
   "name": "vscode-tester",
   "displayName": "Tester Language Support by Linhanmic",
   "description": "Tester Language Support by Linhanmic",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "author": "Linhanmic",
   "icon": "icons/icon.png",
   "contributors": [
@@ -18,7 +18,7 @@
     "url": "https://github.com/Linhanmic/vscode-tester"
   },
   "engines": {
-    "vscode": "^1.109.0"
+    "vscode": "^1.80.0"
   },
   "activationEvents": [
     "onLanguage:tester"
